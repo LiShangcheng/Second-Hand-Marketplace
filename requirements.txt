@@ -1,0 +1,19 @@
+Flask==2.3.0
+flask-cors==4.0.0
+Werkzeug==2.3.0
+PyJWT==2.8.0
+
+# 数据库
+# SQLite 已内置在 Python 中，无需额外安装
+
+# 开发工具
+python-dotenv==1.0.0
+
+# 可选：如果需要图片上传
+# Pillow==10.0.0
+
+# 可选：如果需要发送真实邮件
+# Flask-Mail==0.9.1
+
+# 可选：如果需要发送短信
+# twilio==8.10.0

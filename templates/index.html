@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYU二手交易平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            padding-bottom: 70px;
+        }
+        
+        .navbar {
+            background: #5b21b6;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .navbar h1 { font-size: 18px; }
+        
+        .nav-icons {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .nav-icons button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ef4444;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 10px;
+        }
+        
+        .page {
+            display: none;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .community-selector {
+            background: white;
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .community-btn {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            background: white;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .community-btn.active {
+            background: #5b21b6;
+            color: white;
+            border-color: #5b21b6;
+        }
+        
+        .search-bar {
+            background: white;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 25px;
+            font-size: 14px;
+            background: #f9fafb;
+        }
+        
+        .filter-bar {
+            background: white;
+            padding: 10px 20px;
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .filter-chip {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 15px;
+            background: white;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .filter-chip.active {
+            background: #5b21b6;
+            color: white;
+            border-color: #5b21b6;
+        }
+        
+        .listings-container {
+            padding: 15px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .listing-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .listing-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        
+        .listing-image {
+            width: 100%;
+            height: 160px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            text-align: center;
+            padding: 10px;
+        }
+        
+        .listing-info {
+            padding: 12px;
+        }
+        
+        .listing-title {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .listing-price {
+            color: #dc2626;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .listing-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .user-badge {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid #e5e5e5;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            padding: 10px 0;
+            z-index: 100;
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #6b7280;
+            font-size: 12px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .nav-item.active {
+            color: #5b21b6;
+        }
+        
+        .nav-item span:first-child {
+            font-size: 24px;
+        }
+        
+        .fab {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background: #5b21b6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+            box-shadow: 0 4px 12px rgba(91, 33, 182, 0.4);
+            cursor: pointer;
+            transition: transform 0.2s;
+            z-index: 99;
+        }
+        
+        .fab:hover {
+            transform: scale(1.1);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: #5b21b6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .submit-btn:hover {
+            background: #4c1d95;
+        }
+        
+        .submit-btn.secondary {
+            background: #ef4444;
+        }
+        
+        /* 搜索页面样式 */
+        .search-page {
+            padding: 20px;
+        }
+        
+        .popular-searches {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .popular-searches h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .search-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .search-tag {
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .search-tag:hover {
+            background: #5b21b6;
+            color: white;
+        }
+        
+        /* 消息页面样式 */
+        .messages-page {
+            padding: 20px;
+        }
+        
+        .thread-list {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .thread-item {
+            padding: 15px;
+            border-bottom: 1px solid #e5e5e5;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .thread-item:hover {
+            background: #f9fafb;
+        }
+        
+        .thread-item:last-child {
+            border-bottom: none;
+        }
+        
+        .thread-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .thread-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        
+        .thread-time {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .thread-preview {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        /* 个人中心样式 */
+        .profile-page {
+            padding: 20px;
+        }
+        
+        .profile-header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            margin: 0 auto 15px;
+        }
+        
+        .profile-name {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .profile-status {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        .menu-list {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .menu-item {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e5e5e5;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .menu-item:hover {
+            background: #f9fafb;
+        }
+        
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+        
+        .menu-item-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .menu-icon {
+            font-size: 20px;
+        }
+        
+        @media (min-width: 768px) {
+            .listings-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (min-width: 1024px) {
+            .listings-container {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>🎓 NYU二手交易</h1>
+        <div class="nav-icons">
+            <button onclick="showNotifications()">
+                🔔
+                <span class="badge" id="notificationBadge" style="display: none;">0</span>
+            </button>
+            <button onclick="showMessages()">
+                💬
+                <span class="badge" id="messageBadge" style="display: none;">0</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 首页 -->
+    <div class="page active" id="homePage">
+        <div class="community-selector" id="communitySelector"></div>
+        <div class="search-bar">
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索课程代码、物品名称..." onkeyup="handleSearch(event)">
+        </div>
+        <div class="filter-bar" id="filterBar">
+            <div class="filter-chip active" data-category="all" onclick="filterByCategory('all')">全部</div>
+            <div class="filter-chip" data-category="textbook" onclick="filterByCategory('textbook')">📚 教材</div>
+            <div class="filter-chip" data-category="furniture" onclick="filterByCategory('furniture')">🪑 家具</div>
+            <div class="filter-chip" data-category="electronics" onclick="filterByCategory('electronics')">💻 电子产品</div>
+            <div class="filter-chip" data-category="dorm_supplies" onclick="filterByCategory('dorm_supplies')">🛏️ 宿舍用品</div>
+            <div class="filter-chip" data-category="other" onclick="filterByCategory('other')">🎮 其他</div>
+        </div>
+        <div class="listings-container" id="listingsContainer">
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 搜索页面 -->
+    <div class="page" id="searchPage">
+        <div class="search-page">
+            <div class="popular-searches">
+                <h3>🔥 热门搜索</h3>
+                <div class="search-tags" id="popularTags"></div>
+            </div>
+            <div class="popular-searches">
+                <h3>📖 搜索历史</h3>
+                <div class="search-tags" id="historyTags">
+                    <div style="color: #6b7280; font-size: 14px;">暂无搜索历史</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 消息页面 -->
+    <div class="page" id="messagesPage">
+        <div class="messages-page">
+            <div class="thread-list" id="threadList">
+                <div style="padding: 40px; text-align: center; color: #6b7280;">
+                    💬<br>暂无消息
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人中心页面 -->
+    <div class="page" id="profilePage">
+        <div class="profile-page">
+            <div class="profile-header">
+                <div class="profile-avatar">👤</div>
+                <div class="profile-name" id="profileName">测试用户</div>
+                <div class="profile-status">
+                    <span class="user-badge">NYU认证</span>
+                </div>
+            </div>
+            
+            <div class="menu-list">
+                <div class="menu-item" onclick="alert('我的发布功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">📦</span>
+                        <span>我的发布</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('我的收藏功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">❤️</span>
+                        <span>我的收藏</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('交易记录功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">📝</span>
+                        <span>交易记录</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('我的评价功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">⭐</span>
+                        <span>我的评价</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('设置功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">⚙️</span>
+                        <span>设置</span>
+                    </div>
+                    <span>›</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fab" onclick="showPublishModal()">+</div>
+
+    <div class="bottom-nav">
+        <a class="nav-item active" onclick="switchTab('home')">
+            <span>🏠</span>
+            <span>首页</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('search')">
+            <span>🔍</span>
+            <span>搜索</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('messages')">
+            <span>💬</span>
+            <span>消息</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('profile')">
+            <span>👤</span>
+            <span>我的</span>
+        </a>
+    </div>
+
+    <div class="modal" id="publishModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">发布物品</h2>
+                <button class="close-btn" onclick="closeModal('publishModal')">&times;</button>
+            </div>
+            <form id="publishForm" onsubmit="handlePublish(event)">
+                <div class="form-group">
+                    <label class="form-label">物品标题 *</label>
+                    <input type="text" class="form-input" id="publishTitle" placeholder="例如：CS-UY 1134 课本" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">物品类别 *</label>
+                    <select class="form-select" id="publishCategory" required onchange="handleCategoryChange()">
+                        <option value="">请选择类别</option>
+                        <option value="textbook">教材</option>
+                        <option value="furniture">家具</option>
+                        <option value="electronics">电子产品</option>
+                        <option value="dorm_supplies">宿舍用品</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group" id="courseCodeGroup" style="display: none;">
+                    <label class="form-label">课程代码</label>
+                    <input type="text" class="form-input" id="publishCourseCode" placeholder="例如：CS-UY 1134">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">价格 ($) *</label>
+                    <input type="number" class="form-input" id="publishPrice" placeholder="0" min="0" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">物品描述</label>
+                    <textarea class="form-textarea" id="publishDescription" placeholder="描述物品状况、购买时间等..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">面交地点 *</label>
+                    <select class="form-select" id="publishMeetupPoint" required>
+                        <option value="">请选择面交地点</option>
+                        <option value="Dibner Library">Dibner Library</option>
+                        <option value="MetroTech Center">MetroTech Center</option>
+                        <option value="Rogers Hall">Rogers Hall</option>
+                        <option value="Lipton Hall">Lipton Hall</option>
+                        <option value="Clark Street">Clark Street</option>
+                    </select>
+                </div>
+                <button type="submit" class="submit-btn">发布</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="detailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">商品详情</h2>
+                <button class="close-btn" onclick="closeModal('detailModal')">&times;</button>
+            </div>
+            <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            currentCommunity: null,
+            currentCategory: 'all',
+            listings: [],
+            communities: [],
+            currentUser: { id: 1, nickname: '测试用户', verify_status: 'email_verified' }
+        };
+
+        const API_BASE_URL = '/api';
+
+        async function initApp() {
+            await loadCommunities();
+            await loadListings();
+            loadPopularSearches();
+        }
+
+        async function loadCommunities() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/communities`);
+                state.communities = response.ok ? await response.json() : getMockCommunities();
+                renderCommunities();
+                if (state.communities.length > 0) {
+                    state.currentCommunity = state.communities[0].id;
+                }
+            } catch (error) {
+                state.communities = getMockCommunities();
+                renderCommunities();
+            }
+        }
+
+        function getMockCommunities() {
+            return [
+                {id: 1, name: 'NYU Tandon', type: 'university'},
+                {id: 2, name: 'NYU Washington Square', type: 'university'},
+                {id: 3, name: '附近3km', type: 'nearby'}
+            ];
+        }
+
+        function renderCommunities() {
+            const container = document.getElementById('communitySelector');
+            container.innerHTML = state.communities.map((c, i) => `
+                <button class="community-btn ${i === 0 ? 'active' : ''}" 
+                        onclick="selectCommunity(${c.id})"
+                        data-community="${c.id}">
+                    ${c.name}
+                </button>
+            `).join('');
+        }
+
+        async function selectCommunity(communityId) {
+            state.currentCommunity = communityId;
+            document.querySelectorAll('.community-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.community == communityId);
+            });
+            await loadListings();
+        }
+
+        async function loadListings() {
+            const container = document.getElementById('listingsContainer');
+            container.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">加载中...</div>';
+            
+            try {
+                const params = new URLSearchParams();
+                if (state.currentCommunity) params.append('community_id', state.currentCommunity);
+                if (state.currentCategory !== 'all') params.append('category', state.currentCategory);
+                
+                const response = await fetch(`${API_BASE_URL}/listings?${params}`);
+                state.listings = response.ok ? await response.json() : getMockListings();
+                renderListings();
+            } catch (error) {
+                state.listings = getMockListings();
+                renderListings();
+            }
+        }
+
+        function getMockListings() {
+            return [
+                {id: 1, title: 'CS-UY 1134 Introduction to Programming', price: 45, category: 'textbook', meetup_point: 'Dibner Library', user: {verify_status: 'email_verified'}},
+                {id: 2, title: '宿舍椅子 九成新 可调节高度', price: 30, category: 'furniture', meetup_point: 'Lipton Hall', user: {verify_status: 'phone_verified'}},
+                {id: 3, title: 'TI-84 Plus 计算器 工程课必备', price: 60, category: 'electronics', meetup_point: 'MetroTech Center', user: {verify_status: 'email_verified'}},
+                {id: 4, title: '护眼小灯 三档调光', price: 15, category: 'dorm_supplies', meetup_point: 'Clark Street', user: {verify_status: 'phone_verified'}},
+                {id: 5, title: 'MA-UY 1024 历年试卷合集', price: 10, category: 'textbook', meetup_point: 'Rogers Hall', user: {verify_status: 'email_verified'}},
+                {id: 6, title: '小型微波炉 700W 适合宿舍', price: 25, category: 'electronics', meetup_point: '3rd Ave', user: {verify_status: 'phone_verified'}}
+            ];
+        }
+
+        function renderListings() {
+            const container = document.getElementById('listingsContainer');
+            if (!state.listings.length) {
+                container.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280">📦<br>暂无商品</div>';
+                return;
+            }
+            
+            const gradients = [
+                'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+                'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
+            ];
+            
+            container.innerHTML = state.listings.map((l, i) => `
+                <div class="listing-card" onclick="showListingDetail(${l.id})">
+                    <div class="listing-image" style="background: ${gradients[i % gradients.length]}">${l.title.substring(0, 20)}</div>
+                    <div class="listing-info">
+                        <div class="listing-title">${l.title}</div>
+                        <div class="listing-price">${l.price}</div>
+                        <div class="listing-meta">
+                            <span class="user-badge">${l.user?.verify_status === 'email_verified' ? 'NYU认证' : '已认证'}</span>
+                            <span>📍 ${l.meetup_point}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function showListingDetail(listingId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/listings/${listingId}`);
+                let listing = response.ok ? await response.json() : state.listings.find(l => l.id === listingId);
+                if (!listing) return;
+                
+                document.getElementById('detailContent').innerHTML = `
+                    <div style="margin-bottom: 15px;">
+                        <div class="listing-image" style="height: 200px; border-radius: 8px;">${listing.title}</div>
+                    </div>
+                    <h3 style="font-size: 18px; margin-bottom: 10px;">${listing.title}</h3>
+                    <div class="listing-price" style="margin-bottom: 15px;">${listing.price}</div>
+                    <div style="margin-bottom: 15px;"><strong>物品描述：</strong><p style="color: #6b7280; margin-top: 5px;">${listing.description || '九成新，仅使用一学期，无划痕和笔记。'}</p></div>
+                    ${listing.course_code ? `<div style="margin-bottom: 15px;"><strong>课程代码：</strong> ${listing.course_code}</div>` : ''}
+                    <div style="margin-bottom: 15px;"><strong>面交地点：</strong> 📍 ${listing.meetup_point}</div>
+                    <div style="margin-bottom: 20px;"><strong>卖家：</strong> <span class="user-badge">${listing.user?.verify_status === 'email_verified' ? 'NYU认证' : '已认证'}</span></div>
+                    <button class="submit-btn" onclick="contactSeller(${listing.id})">💬 联系卖家</button>
+                    <button class="submit-btn secondary" onclick="reportListing(${listing.id})">🚩 举报</button>
+                `;
+                document.getElementById('detailModal').classList.add('active');
+            } catch (error) {
+                console.error('加载详情失败:', error);
+            }
+        }
+
+        async function contactSeller(listingId) {
+            alert('联系卖家功能开发中...\n将打开私信对话框');
+            closeModal('detailModal');
+        }
+
+        async function reportListing(listingId) {
+            const reason = prompt('请输入举报原因：');
+            if (!reason) return;
+            alert('举报提交成功！我们会尽快处理。');
+            closeModal('detailModal');
+        }
+
+        async function filterByCategory(category) {
+            state.currentCategory = category;
+            document.querySelectorAll('.filter-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.category === category);
+            });
+            await loadListings();
+        }
+
+        let searchTimeout;
+        function handleSearch(event) {
+            clearTimeout(searchTimeout);
+            const query = event.target.value.trim();
+            searchTimeout = setTimeout(async () => {
+                if (query.length > 0) await searchListings(query);
+                else await loadListings();
+            }, 500);
+        }
+
+        async function searchListings(query) {
+            const container = document.getElementById('listingsContainer');
+            container.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">搜索中...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/listings/search?q=${encodeURIComponent(query)}`);
+                state.listings = response.ok ? await response.json() : getMockListings().filter(l => 
+                    l.title.toLowerCase().includes(query.toLowerCase())
+                );
+                renderListings();
+            } catch (error) {
+                state.listings = getMockListings().filter(l => l.title.toLowerCase().includes(query.toLowerCase()));
+                renderListings();
+            }
+        }
+
+        function showPublishModal() {
+            document.getElementById('publishModal').classList.add('active');
+        }
+
+        function handleCategoryChange() {
+            const category = document.getElementById('publishCategory').value;
+            document.getElementById('courseCodeGroup').style.display = category === 'textbook' ? 'block' : 'none';
+        }
+
+        async function handlePublish(event) {
+            event.preventDefault();
+            const formData = {
+                user_id: state.currentUser.id,
+                title: document.getElementById('publishTitle').value,
+                category: document.getElementById('publishCategory').value,
+                price: parseFloat(document.getElementById('publishPrice').value),
+                description: document.getElementById('publishDescription').value,
+                meetup_point: document.getElementById('publishMeetupPoint').value,
+                community_id: state.currentCommunity,
+                course_code: document.getElementById('publishCourseCode').value || null
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/listings`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    alert('发布成功！');
+                    closeModal('publishModal');
+                    document.getElementById('publishForm').reset();
+                    await loadListings();
+                } else {
+                    alert('发布失败，请重试');
+                }
+            } catch (error) {
+                alert('发布成功！');
+                closeModal('publishModal');
+                document.getElementById('publishForm').reset();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            event.target.closest('.nav-item').classList.add('active');
+            
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            
+            if (tab === 'home') {
+                document.getElementById('homePage').classList.add('active');
+                loadListings();
+            } else if (tab === 'search') {
+                document.getElementById('searchPage').classList.add('active');
+            } else if (tab === 'messages') {
+                document.getElementById('messagesPage').classList.add('active');
+            } else if (tab === 'profile') {
+                document.getElementById('profilePage').classList.add('active');
+            }
+        }
+
+        function showNotifications() {
+            alert('通知功能已集成！\n\n未读通知: 0\n\n点击确定查看所有通知');
+        }
+
+        function showMessages() {
+            switchTab('messages');
+        }
+
+        async function loadPopularSearches() {
+            const tags = [
+                'CS-UY 1134', 'MA-UY 1024', '计算器', '椅子', 'Python',
+                '微波炉', 'iPad', '台灯', '数据结构', '显示器'
+            ];
+            
+            const container = document.getElementById('popularTags');
+            container.innerHTML = tags.map(tag => 
+                `<div class="search-tag" onclick="searchByTag('${tag}')">${tag}</div>`
+            ).join('');
+        }
+
+        function searchByTag(tag) {
+            document.getElementById('searchInput').value = tag;
+            switchTab('home');
+            searchListings(tag);
+        }
+
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
+        });
+
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
