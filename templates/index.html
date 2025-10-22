@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYU二手交易平台</title>
+    
+    <!-- CSS Files -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/modal.css">
+    <link rel="stylesheet" href="/static/css/pages.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div class="navbar">
+        <h1>🎓 NYU二手交易</h1>
+        <div class="nav-icons">
+            <button onclick="showNotifications()">
+                🔔
+                <span class="badge" id="notificationBadge" style="display: none;">0</span>
+            </button>
+            <button onclick="showMessages()">
+                💬
+                <span class="badge" id="messageBadge" style="display: none;">0</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 首页 -->
+    <div class="page active" id="homePage">
+        <div class="community-selector" id="communitySelector"></div>
+        <div class="search-bar">
+            <input type="text" class="search-input" id="searchInput" 
+                   placeholder="搜索课程代码、物品名称..." 
+                   onfocus="switchToSearchPage()" 
+                   onclick="switchToSearchPage()" 
+                   readonly style="cursor: pointer;">
+        </div>
+        <div class="filter-bar" id="filterBar">
+            <div class="filter-chip active" data-category="all" onclick="filterByCategory('all')">全部</div>
+            <div class="filter-chip" data-category="textbook" onclick="filterByCategory('textbook')">📚 教材</div>
+            <div class="filter-chip" data-category="furniture" onclick="filterByCategory('furniture')">🪑 家具</div>
+            <div class="filter-chip" data-category="electronics" onclick="filterByCategory('electronics')">💻 电子产品</div>
+            <div class="filter-chip" data-category="dorm_supplies" onclick="filterByCategory('dorm_supplies')">🛏️ 宿舍用品</div>
+            <div class="filter-chip" data-category="other" onclick="filterByCategory('other')">🎮 其他</div>
+        </div>
+        <div class="listings-container" id="listingsContainer">
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+
+    <!-- 搜索页面 -->
+    <div class="page" id="searchPage">
+        <div class="search-page">
+            <!-- 搜索框 -->
+            <div style="background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 12px;">
+                <input type="text" class="search-input" id="searchPageInput" 
+                       placeholder="搜索课程代码、物品名称..." 
+                       onkeyup="handleSearchPageInput(event)">
+            </div>
+            
+            <!-- 搜索结果 -->
+            <div id="searchResultsContainer" style="display: none;">
+                <div style="background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+                    <h3 style="font-size: 16px; margin-bottom: 15px;">🔍 搜索结果</h3>
+                    <div id="searchResultsList"></div>
+                </div>
+            </div>
+            
+            <!-- 热门搜索 -->
+            <div class="popular-searches" id="popularSearchesSection">
+                <h3>🔥 热门搜索</h3>
+                <div class="search-tags" id="popularTags"></div>
+            </div>
+            
+            <!-- 搜索历史 -->
+            <div class="popular-searches" id="searchHistorySection">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📖 搜索历史</h3>
+                    <button onclick="clearSearchHistory()" 
+                            style="background: none; border: none; color: #6b7280; font-size: 14px; cursor: pointer;">
+                        清空
+                    </button>
+                </div>
+                <div class="search-tags" id="historyTags">
+                    <div style="color: #6b7280; font-size: 14px;">暂无搜索历史</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 消息页面 -->
+    <div class="page" id="messagesPage">
+        <div class="messages-page">
+            <div class="thread-list" id="threadList">
+                <div style="padding: 40px; text-align: center; color: #6b7280;">
+                    💬<br>暂无消息
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人中心页面 -->
+    <div class="page" id="profilePage">
+        <div class="profile-page">
+            <div class="profile-header">
+                <div class="profile-avatar">👤</div>
+                <div class="profile-name" id="profileName">测试用户</div>
+                <div class="profile-status">
+                    <span class="user-badge">NYU认证</span>
+                </div>
+            </div>
+            
+            <div class="menu-list">
+                <div class="menu-item" onclick="alert('我的发布功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">📦</span>
+                        <span>我的发布</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('我的收藏功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">❤️</span>
+                        <span>我的收藏</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('交易记录功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">📝</span>
+                        <span>交易记录</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('我的评价功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">⭐</span>
+                        <span>我的评价</span>
+                    </div>
+                    <span>›</span>
+                </div>
+                <div class="menu-item" onclick="alert('设置功能开发中...')">
+                    <div class="menu-item-left">
+                        <span class="menu-icon">⚙️</span>
+                        <span>设置</span>
+                    </div>
+                    <span>›</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮动发布按钮 -->
+    <div class="fab" onclick="showPublishModal()">+</div>
+
+    <!-- 底部导航 -->
+    <div class="bottom-nav">
+        <a class="nav-item active" onclick="switchTab('home')">
+            <span>🏠</span>
+            <span>首页</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('search')">
+            <span>🔍</span>
+            <span>搜索</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('messages')">
+            <span>💬</span>
+            <span>消息</span>
+        </a>
+        <a class="nav-item" onclick="switchTab('profile')">
+            <span>👤</span>
+            <span>我的</span>
+        </a>
+    </div>
+
+    <!-- 发布模态框 -->
+    <div class="modal" id="publishModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">发布物品</h2>
+                <button class="close-btn" onclick="closeModal('publishModal')">&times;</button>
+            </div>
+            <form id="publishForm" onsubmit="handlePublish(event)">
+                <div class="form-group">
+                    <label class="form-label">物品标题 *</label>
+                    <input type="text" class="form-input" id="publishTitle" 
+                           placeholder="例如：CS-UY 1134 课本" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">物品类别 *</label>
+                    <select class="form-select" id="publishCategory" required onchange="handleCategoryChange()">
+                        <option value="">请选择类别</option>
+                        <option value="textbook">教材</option>
+                        <option value="furniture">家具</option>
+                        <option value="electronics">电子产品</option>
+                        <option value="dorm_supplies">宿舍用品</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group" id="courseCodeGroup" style="display: none;">
+                    <label class="form-label">课程代码</label>
+                    <input type="text" class="form-input" id="publishCourseCode" 
+                           placeholder="例如：CS-UY 1134">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">价格 ($) *</label>
+                    <input type="number" class="form-input" id="publishPrice" 
+                           placeholder="0" min="0" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">物品描述</label>
+                    <textarea class="form-textarea" id="publishDescription" 
+                              placeholder="描述物品状况、购买时间等..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">面交地点 *</label>
+                    <select class="form-select" id="publishMeetupPoint" required>
+                        <option value="">请选择面交地点</option>
+                        <option value="Dibner Library">Dibner Library</option>
+                        <option value="MetroTech Center">MetroTech Center</option>
+                        <option value="Rogers Hall">Rogers Hall</option>
+                        <option value="Lipton Hall">Lipton Hall</option>
+                        <option value="Clark Street">Clark Street</option>
+                    </select>
+                </div>
+                <button type="submit" class="submit-btn">发布</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 详情模态框 -->
+    <div class="modal" id="detailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">商品详情</h2>
+                <button class="close-btn" onclick="closeModal('detailModal')">&times;</button>
+            </div>
+            <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="/static/js/state.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ui.js"></script>
+    <script src="/static/js/search.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
