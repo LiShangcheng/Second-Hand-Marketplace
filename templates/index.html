@@ -550,12 +550,31 @@
     <!-- 搜索页面 -->
     <div class="page" id="searchPage">
         <div class="search-page">
-            <div class="popular-searches">
+            <!-- 搜索框 -->
+            <div style="background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 12px;">
+                <input type="text" class="search-input" id="searchPageInput" placeholder="搜索课程代码、物品名称..." onkeyup="handleSearchPageInput(event)">
+            </div>
+            
+            <!-- 搜索结果 -->
+            <div id="searchResultsContainer" style="display: none;">
+                <div style="background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+                    <h3 style="font-size: 16px; margin-bottom: 15px;">🔍 搜索结果</h3>
+                    <div id="searchResultsList"></div>
+                </div>
+            </div>
+            
+            <!-- 热门搜索 -->
+            <div class="popular-searches" id="popularSearchesSection">
                 <h3>🔥 热门搜索</h3>
                 <div class="search-tags" id="popularTags"></div>
             </div>
-            <div class="popular-searches">
-                <h3>📖 搜索历史</h3>
+            
+            <!-- 搜索历史 -->
+            <div class="popular-searches" id="searchHistorySection">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📖 搜索历史</h3>
+                    <button onclick="clearSearchHistory()" style="background: none; border: none; color: #6b7280; font-size: 14px; cursor: pointer;">清空</button>
+                </div>
                 <div class="search-tags" id="historyTags">
                     <div style="color: #6b7280; font-size: 14px;">暂无搜索历史</div>
                 </div>
@@ -721,6 +740,7 @@
             await loadCommunities();
             await loadListings();
             loadPopularSearches();
+            renderSearchHistory(); // 加载搜索历史
         }
 
         async function loadCommunities() {
@@ -883,6 +903,11 @@
             const container = document.getElementById('listingsContainer');
             container.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">搜索中...</div>';
             
+            // 保存到搜索历史
+            if (query && query.length > 0) {
+                saveToSearchHistory(query);
+            }
+            
             try {
                 const response = await fetch(`${API_BASE_URL}/listings/search?q=${encodeURIComponent(query)}`);
                 state.listings = response.ok ? await response.json() : getMockListings().filter(l => 
@@ -892,6 +917,76 @@
             } catch (error) {
                 state.listings = getMockListings().filter(l => l.title.toLowerCase().includes(query.toLowerCase()));
                 renderListings();
+            }
+        }
+        
+        function saveToSearchHistory(query) {
+            if (!query || query.trim().length === 0) return;
+            
+            try {
+                // 从 localStorage 获取搜索历史
+                let history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+                
+                // 移除重复的搜索词
+                history = history.filter(item => item !== query);
+                
+                // 添加到开头
+                history.unshift(query);
+                
+                // 只保留最近10条
+                history = history.slice(0, 10);
+                
+                // 保存回 localStorage
+                localStorage.setItem('searchHistory', JSON.stringify(history));
+                
+                // 更新显示
+                renderSearchHistory();
+            } catch (error) {
+                console.error('保存搜索历史失败:', error);
+            }
+        }
+        
+        function renderSearchHistory() {
+            try {
+                const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+                const container = document.getElementById('historyTags');
+                
+                if (!container) return;
+                
+                if (history.length === 0) {
+                    container.innerHTML = '<div style="color: #6b7280; font-size: 14px;">暂无搜索历史</div>';
+                    return;
+                }
+                
+                container.innerHTML = history.map(term => `
+                    <div class="search-tag" onclick="searchByTag('${term.replace(/'/g, "\\'")}')">
+                        ${term}
+                        <span onclick="event.stopPropagation(); removeFromHistory('${term.replace(/'/g, "\\'")}')}" 
+                              style="margin-left: 5px; cursor: pointer; opacity: 0.6;">×</span>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('渲染搜索历史失败:', error);
+            }
+        }
+        
+        function removeFromHistory(term) {
+            try {
+                let history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+                history = history.filter(item => item !== term);
+                localStorage.setItem('searchHistory', JSON.stringify(history));
+                renderSearchHistory();
+            } catch (error) {
+                console.error('删除搜索历史失败:', error);
+            }
+        }
+        
+        function clearSearchHistory() {
+            try {
+                localStorage.removeItem('searchHistory');
+                renderSearchHistory();
+            } catch (error) {
+                console.error('清空搜索历史失败:', error);
             }
         }
 
@@ -944,9 +1039,19 @@
         }
 
         function switchTab(tab) {
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            event.target.closest('.nav-item').classList.add('active');
+            // 更新底部导航栏的激活状态
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
             
+            // 找到对应的导航项并激活
+            const navItems = document.querySelectorAll('.nav-item');
+            if (tab === 'home' && navItems[0]) navItems[0].classList.add('active');
+            else if (tab === 'search' && navItems[1]) navItems[1].classList.add('active');
+            else if (tab === 'messages' && navItems[2]) navItems[2].classList.add('active');
+            else if (tab === 'profile' && navItems[3]) navItems[3].classList.add('active');
+            
+            // 切换页面显示
             document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
             
             if (tab === 'home') {
@@ -954,6 +1059,11 @@
                 loadListings();
             } else if (tab === 'search') {
                 document.getElementById('searchPage').classList.add('active');
+                // 重置搜索页面状态
+                document.getElementById('searchPageInput').value = '';
+                document.getElementById('searchResultsContainer').style.display = 'none';
+                document.getElementById('popularSearchesSection').style.display = 'block';
+                document.getElementById('searchHistorySection').style.display = 'block';
             } else if (tab === 'messages') {
                 document.getElementById('messagesPage').classList.add('active');
             } else if (tab === 'profile') {
@@ -983,8 +1093,95 @@
 
         function searchByTag(tag) {
             document.getElementById('searchInput').value = tag;
+            document.getElementById('searchPageInput').value = tag;
+            
+            // 保存到搜索历史
+            saveToSearchHistory(tag);
+            
             switchTab('home');
             searchListings(tag);
+        }
+        
+        function handleSearchPageInput(event) {
+            clearTimeout(searchTimeout);
+            const query = event.target.value.trim();
+            
+            if (query.length === 0) {
+                // 显示热门搜索和历史
+                document.getElementById('searchResultsContainer').style.display = 'none';
+                document.getElementById('popularSearchesSection').style.display = 'block';
+                document.getElementById('searchHistorySection').style.display = 'block';
+                return;
+            }
+            
+            searchTimeout = setTimeout(async () => {
+                await searchInSearchPage(query);
+            }, 500);
+        }
+        
+        async function searchInSearchPage(query) {
+            // 隐藏热门搜索和历史
+            document.getElementById('popularSearchesSection').style.display = 'none';
+            document.getElementById('searchHistorySection').style.display = 'none';
+            
+            // 显示搜索结果区域
+            const container = document.getElementById('searchResultsContainer');
+            const resultsList = document.getElementById('searchResultsList');
+            container.style.display = 'block';
+            resultsList.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">搜索中...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/listings/search?q=${encodeURIComponent(query)}`);
+                const results = response.ok ? await response.json() : getMockListings().filter(l => 
+                    l.title.toLowerCase().includes(query.toLowerCase())
+                );
+                
+                if (results.length === 0) {
+                    resultsList.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280">📦<br>未找到相关商品</div>';
+                    return;
+                }
+                
+                const gradients = [
+                    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                    'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+                    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
+                ];
+                
+                resultsList.innerHTML = results.map((l, i) => `
+                    <div style="display: flex; gap: 15px; padding: 15px; border-bottom: 1px solid #e5e5e5; cursor: pointer; transition: background 0.2s;" 
+                         onclick="showListingDetailFromSearch(${l.id})"
+                         onmouseover="this.style.background='#f9fafb'" 
+                         onmouseout="this.style.background='white'">
+                        <div style="width: 80px; height: 80px; border-radius: 8px; background: ${gradients[i % gradients.length]}; 
+                                    display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; 
+                                    text-align: center; padding: 5px; flex-shrink: 0;">
+                            ${l.title.substring(0, 15)}
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 500; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                ${l.title}
+                            </div>
+                            <div style="color: #dc2626; font-size: 16px; font-weight: bold; margin-bottom: 5px;">
+                                ${l.price}
+                            </div>
+                            <div style="display: flex; gap: 10px; font-size: 12px; color: #6b7280;">
+                                <span class="user-badge">${l.user?.verify_status === 'email_verified' ? 'NYU认证' : '已认证'}</span>
+                                <span>📍 ${l.meetup_point}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                resultsList.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444">搜索出错，请重试</div>';
+            }
+        }
+        
+        function showListingDetailFromSearch(listingId) {
+            showListingDetail(listingId);
         }
 
         document.querySelectorAll('.modal').forEach(modal => {

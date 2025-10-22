@@ -273,6 +273,47 @@ def create_listing_api():
         return jsonify(listing), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/search/stats', methods=['GET'])
+def get_search_stats():
+    """获取搜索统计信息"""
+    try:
+        stats = search.search_by_category_stats()
+        
+        return jsonify({
+            'categories': stats,
+            'total_active_listings': sum(s['count'] for s in stats)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
+@app.route('/api/listings/search', methods=['GET'])
+def quick_search():
+    """
+    快速搜索（兼容旧版API）
+    
+    查询参数:
+        q: 搜索关键词
+        community_id: 社区ID
+        limit: 返回数量
+    """
+    try:
+        query = request.args.get('q', '').strip()
+        community_id = request.args.get('community_id', type=int)
+        limit = request.args.get('limit', 50, type=int)
+        
+        filters = {'limit': limit}
+        if community_id:
+            filters['community_id'] = community_id
+        
+        results = search.search_listings_advanced(query, filters)
+        
+        return jsonify(results), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/health', methods=['GET'])
@@ -282,6 +323,8 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'version': '2.0.0'
     }), 200
+
+
 
 
 # ===== 初始化 =====
