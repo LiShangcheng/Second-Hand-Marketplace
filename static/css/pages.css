@@ -1,0 +1,178 @@
+/**
+ * 页面特定样式
+ * Page-specific Styles
+ */
+
+/* ===== 搜索页面 ===== */
+.search-page {
+    padding: 20px;
+}
+
+.popular-searches {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.popular-searches h3 {
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+.search-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.search-tag {
+    padding: 8px 16px;
+    background: #f3f4f6;
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.search-tag:hover {
+    background: #5b21b6;
+    color: white;
+}
+
+/* ===== 消息页面 ===== */
+.messages-page {
+    padding: 20px;
+}
+
+.thread-list {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.thread-item {
+    padding: 15px;
+    border-bottom: 1px solid #e5e5e5;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.thread-item:hover {
+    background: #f9fafb;
+}
+
+.thread-item:last-child {
+    border-bottom: none;
+}
+
+.thread-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.thread-title {
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.thread-time {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.thread-preview {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+/* ===== 个人中心 ===== */
+.profile-page {
+    padding: 20px;
+}
+
+.profile-header {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    color: white;
+    margin: 0 auto 15px;
+}
+
+.profile-name {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.profile-status {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.menu-list {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.menu-item {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e5e5e5;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.menu-item:hover {
+    background: #f9fafb;
+}
+
+.menu-item:last-child {
+    border-bottom: none;
+}
+
+.menu-item-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.menu-icon {
+    font-size: 20px;
+}
+
+/* ===== 加载状态 ===== */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
