@@ -100,6 +100,11 @@
             background: #f9fafb;
         }
         
+        .search-input:focus {
+            outline: none;
+            border-color: #5b21b6;
+        }
+        
         .filter-bar {
             background: white;
             padding: 10px 20px;
@@ -532,7 +537,10 @@
     <div class="page active" id="homePage">
         <div class="community-selector" id="communitySelector"></div>
         <div class="search-bar">
-            <input type="text" class="search-input" id="searchInput" placeholder="搜索课程代码、物品名称..." onkeyup="handleSearch(event)">
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索课程代码、物品名称..." 
+                   onfocus="switchToSearchPage()" 
+                   onclick="switchToSearchPage()" 
+                   readonly style="cursor: pointer;">
         </div>
         <div class="filter-bar" id="filterBar">
             <div class="filter-chip active" data-category="all" onclick="filterByCategory('all')">全部</div>
@@ -740,7 +748,7 @@
             await loadCommunities();
             await loadListings();
             loadPopularSearches();
-            renderSearchHistory(); // 加载搜索历史
+            renderSearchHistory();
         }
 
         async function loadCommunities() {
@@ -834,7 +842,7 @@
                     <div class="listing-image" style="background: ${gradients[i % gradients.length]}">${l.title.substring(0, 20)}</div>
                     <div class="listing-info">
                         <div class="listing-title">${l.title}</div>
-                        <div class="listing-price">${l.price}</div>
+                        <div class="listing-price">$${l.price}</div>
                         <div class="listing-meta">
                             <span class="user-badge">${l.user?.verify_status === 'email_verified' ? 'NYU认证' : '已认证'}</span>
                             <span>📍 ${l.meetup_point}</span>
@@ -855,7 +863,7 @@
                         <div class="listing-image" style="height: 200px; border-radius: 8px;">${listing.title}</div>
                     </div>
                     <h3 style="font-size: 18px; margin-bottom: 10px;">${listing.title}</h3>
-                    <div class="listing-price" style="margin-bottom: 15px;">${listing.price}</div>
+                    <div class="listing-price" style="margin-bottom: 15px;">$${listing.price}</div>
                     <div style="margin-bottom: 15px;"><strong>物品描述：</strong><p style="color: #6b7280; margin-top: 5px;">${listing.description || '九成新，仅使用一学期，无划痕和笔记。'}</p></div>
                     ${listing.course_code ? `<div style="margin-bottom: 15px;"><strong>课程代码：</strong> ${listing.course_code}</div>` : ''}
                     <div style="margin-bottom: 15px;"><strong>面交地点：</strong> 📍 ${listing.meetup_point}</div>
@@ -889,21 +897,23 @@
             await loadListings();
         }
 
-        let searchTimeout;
-        function handleSearch(event) {
-            clearTimeout(searchTimeout);
-            const query = event.target.value.trim();
-            searchTimeout = setTimeout(async () => {
-                if (query.length > 0) await searchListings(query);
-                else await loadListings();
-            }, 500);
+        // ✨ 新增：从首页跳转到搜索页面
+        function switchToSearchPage() {
+            switchTab('search');
+            // 聚焦到搜索页面的输入框
+            setTimeout(() => {
+                const searchPageInput = document.getElementById('searchPageInput');
+                if (searchPageInput) {
+                    searchPageInput.focus();
+                }
+            }, 100);
         }
 
+        let searchTimeout;
         async function searchListings(query) {
             const container = document.getElementById('listingsContainer');
             container.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280">搜索中...</div>';
             
-            // 保存到搜索历史
             if (query && query.length > 0) {
                 saveToSearchHistory(query);
             }
@@ -924,22 +934,11 @@
             if (!query || query.trim().length === 0) return;
             
             try {
-                // 从 localStorage 获取搜索历史
                 let history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-                
-                // 移除重复的搜索词
                 history = history.filter(item => item !== query);
-                
-                // 添加到开头
                 history.unshift(query);
-                
-                // 只保留最近10条
                 history = history.slice(0, 10);
-                
-                // 保存回 localStorage
                 localStorage.setItem('searchHistory', JSON.stringify(history));
-                
-                // 更新显示
                 renderSearchHistory();
             } catch (error) {
                 console.error('保存搜索历史失败:', error);
@@ -1039,19 +1038,16 @@
         }
 
         function switchTab(tab) {
-            // 更新底部导航栏的激活状态
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
             });
             
-            // 找到对应的导航项并激活
             const navItems = document.querySelectorAll('.nav-item');
             if (tab === 'home' && navItems[0]) navItems[0].classList.add('active');
             else if (tab === 'search' && navItems[1]) navItems[1].classList.add('active');
             else if (tab === 'messages' && navItems[2]) navItems[2].classList.add('active');
             else if (tab === 'profile' && navItems[3]) navItems[3].classList.add('active');
             
-            // 切换页面显示
             document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
             
             if (tab === 'home') {
@@ -1059,7 +1055,6 @@
                 loadListings();
             } else if (tab === 'search') {
                 document.getElementById('searchPage').classList.add('active');
-                // 重置搜索页面状态
                 document.getElementById('searchPageInput').value = '';
                 document.getElementById('searchResultsContainer').style.display = 'none';
                 document.getElementById('popularSearchesSection').style.display = 'block';
@@ -1092,14 +1087,9 @@
         }
 
         function searchByTag(tag) {
-            document.getElementById('searchInput').value = tag;
             document.getElementById('searchPageInput').value = tag;
-            
-            // 保存到搜索历史
             saveToSearchHistory(tag);
-            
-            switchTab('home');
-            searchListings(tag);
+            handleSearchPageInput({target: {value: tag}});
         }
         
         function handleSearchPageInput(event) {
@@ -1107,7 +1097,6 @@
             const query = event.target.value.trim();
             
             if (query.length === 0) {
-                // 显示热门搜索和历史
                 document.getElementById('searchResultsContainer').style.display = 'none';
                 document.getElementById('popularSearchesSection').style.display = 'block';
                 document.getElementById('searchHistorySection').style.display = 'block';
@@ -1120,11 +1109,9 @@
         }
         
         async function searchInSearchPage(query) {
-            // 隐藏热门搜索和历史
             document.getElementById('popularSearchesSection').style.display = 'none';
             document.getElementById('searchHistorySection').style.display = 'none';
             
-            // 显示搜索结果区域
             const container = document.getElementById('searchResultsContainer');
             const resultsList = document.getElementById('searchResultsList');
             container.style.display = 'block';
@@ -1165,7 +1152,7 @@
                                 ${l.title}
                             </div>
                             <div style="color: #dc2626; font-size: 16px; font-weight: bold; margin-bottom: 5px;">
-                                ${l.price}
+                                $${l.price}
                             </div>
                             <div style="display: flex; gap: 10px; font-size: 12px; color: #6b7280;">
                                 <span class="user-badge">${l.user?.verify_status === 'email_verified' ? 'NYU认证' : '已认证'}</span>
