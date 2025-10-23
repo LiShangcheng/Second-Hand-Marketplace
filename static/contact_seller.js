@@ -1,9 +1,8 @@
 /**
- * 联系卖家功能 - 独立模块
- * Contact Seller Module
+ * 联系卖家功能 - 修复版
+ * Contact Seller Module - Fixed Version
  * 
  * 功能：处理用户点击"联系卖家"到发送消息的完整流程
- * Features: Complete workflow from clicking "contact seller" to sending messages
  */
 
 // ===== 状态管理 =====
@@ -24,18 +23,18 @@ async function contactSeller(listingId) {
         const currentUser = getCurrentUser();
         
         if (!listing) {
-            UI.showError('商品不存在');
+            showError('商品不存在');
             return;
         }
         
         if (!listing.user || !listing.user.id) {
-            UI.showError('无法获取卖家信息');
+            showError('无法获取卖家信息');
             return;
         }
         
         // 2. 防止用户和自己联系
         if (listing.user.id === currentUser.id) {
-            UI.showError('不能和自己联系');
+            showError('不能和自己联系');
             return;
         }
         
@@ -65,7 +64,7 @@ async function contactSeller(listingId) {
         
     } catch (error) {
         console.error('联系卖家失败:', error);
-        UI.showError('联系卖家失败: ' + error.message);
+        showError('联系卖家失败: ' + error.message);
     }
 }
 
@@ -74,13 +73,24 @@ async function contactSeller(listingId) {
  */
 async function createThread(buyerId, sellerId, listingId) {
     try {
-        const response = await API.post('/api/threads', {
-            buyer_id: buyerId,
-            seller_id: sellerId,
-            listing_id: listingId
+        const response = await fetch('/api/threads', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                buyer_id: buyerId,
+                seller_id: sellerId,
+                listing_id: listingId
+            })
         });
         
-        return response;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '创建会话失败');
+        }
+        
+        return await response.json();
     } catch (error) {
         console.error('创建会话失败:', error);
         throw new Error('无法创建会话: ' + error.message);
@@ -120,7 +130,7 @@ async function openMessageDialog(threadId, listing, seller) {
         
     } catch (error) {
         console.error('打开对话框失败:', error);
-        UI.showError('打开对话框失败: ' + error.message);
+        showError('打开对话框失败: ' + error.message);
     }
 }
 
@@ -146,7 +156,7 @@ function renderProductInfo(listing) {
                     ${listing.title}
                 </div>
                 <div style="color: #dc2626; font-weight: bold; font-size: 16px;">
-                    ¥${listing.price}
+                    $${listing.price}
                 </div>
                 <div style="font-size: 12px; color: #6b7280; margin-top: 3px;">
                     ${listing.meetup_point || '面交地点未设置'}
@@ -198,7 +208,13 @@ async function loadMessages(threadId) {
         
         messagesContainer.innerHTML = '<div class="loading" style="text-align: center; color: #9ca3af; padding: 20px;">加载消息中...</div>';
         
-        const messages = await API.get(`/api/threads/${threadId}/messages`);
+        const response = await fetch(`/api/threads/${threadId}/messages`);
+        
+        if (!response.ok) {
+            throw new Error('加载消息失败');
+        }
+        
+        const messages = await response.json();
         console.log('获取消息:', messages);
         
         if (!messages || messages.length === 0) {
@@ -255,17 +271,17 @@ async function sendMessage() {
         
         // 1. 验证消息内容
         if (!content) {
-            UI.showError('请输入消息内容');
+            showError('请输入消息内容');
             return;
         }
         
         if (content.length > 1000) {
-            UI.showError('消息过长（最多1000字）');
+            showError('消息过长（最多1000字）');
             return;
         }
         
         if (!currentThreadId) {
-            UI.showError('没有会话ID');
+            showError('没有会话ID');
             return;
         }
         
@@ -273,7 +289,7 @@ async function sendMessage() {
         const sellerId = getSellerId();
         
         if (!sellerId) {
-            UI.showError('无法获取卖家ID');
+            showError('无法获取卖家ID');
             return;
         }
         
@@ -290,14 +306,26 @@ async function sendMessage() {
             content: content
         });
         
-        const response = await API.post('/api/messages', {
-            thread_id: currentThreadId,
-            from_user_id: currentUser.id,
-            to_user_id: sellerId,
-            content: content
+        const response = await fetch('/api/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                thread_id: currentThreadId,
+                from_user_id: currentUser.id,
+                to_user_id: sellerId,
+                content: content
+            })
         });
         
-        console.log('消息发送成功:', response);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '发送失败');
+        }
+        
+        const result = await response.json();
+        console.log('消息发送成功:', result);
         
         // 4. 清空输入框
         input.value = '';
@@ -311,12 +339,14 @@ async function sendMessage() {
         
     } catch (error) {
         console.error('发送消息失败:', error);
-        UI.showError('发送消息失败: ' + error.message);
+        showError('发送消息失败: ' + error.message);
         
         // 恢复按钮
         const sendBtn = document.getElementById('messageSendBtn');
-        sendBtn.disabled = false;
-        sendBtn.textContent = '发送';
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = '发送';
+        }
     }
 }
 
@@ -325,9 +355,6 @@ async function sendMessage() {
  */
 function getSellerId() {
     if (!currentThread) return null;
-    const currentUser = getCurrentUser();
-    // 如果当前用户是买家，卖家ID就是 listing.user.id
-    // 如果当前用户是卖家，卖家ID就是 currentUser.id
     return currentThread.seller ? currentThread.seller.id : null;
 }
 
@@ -348,7 +375,13 @@ async function loadMessagesPage() {
         
         threadList.innerHTML = '<div style="text-align: center; color: #9ca3af; padding: 40px;">加载中...</div>';
         
-        const threads = await API.get(`/api/threads/${currentUser.id}`);
+        const response = await fetch(`/api/threads/${currentUser.id}`);
+        
+        if (!response.ok) {
+            throw new Error('加载失败');
+        }
+        
+        const threads = await response.json();
         console.log('获取会话列表:', threads);
         
         if (!threads || threads.length === 0) {
@@ -379,7 +412,7 @@ function renderThreadItem(thread) {
     return `
         <div class="thread-item" onclick="openThreadFromList(${thread.id})" 
              style="padding: 15px; border-bottom: 1px solid #e5e5e5; cursor: pointer; 
-                    transition: background 0.2s; hover-bg: #f9fafb;">
+                    transition: background 0.2s;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="font-weight: 500; color: #111827;">${otherUser.nickname}</div>
                 <div style="font-size: 12px; color: #9ca3af;">${formatTime(thread.last_message_at)}</div>
@@ -388,7 +421,7 @@ function renderThreadItem(thread) {
                 ${thread.listing_title}
             </div>
             <div style="font-size: 14px; color: #dc2626; font-weight: bold;">
-                ¥${thread.listing_price}
+                $${thread.listing_price}
             </div>
         </div>
     `;
@@ -397,17 +430,56 @@ function renderThreadItem(thread) {
 /**
  * 从消息列表打开会话
  */
-function openThreadFromList(threadId) {
-    currentThreadId = threadId;
-    
-    // 更新对话框信息
-    const dialogTitle = document.getElementById('messageDialogTitle');
-    if (dialogTitle) {
-        dialogTitle.textContent = '消息对话';
+async function openThreadFromList(threadId) {
+    try {
+        currentThreadId = threadId;
+        
+        // 获取会话详情
+        const response = await fetch(`/api/threads/${threadId}`);
+        if (!response.ok) {
+            throw new Error('获取会话详情失败');
+        }
+        
+        const thread = await response.json();
+        
+        // 更新对话框信息
+        const dialogTitle = document.getElementById('messageDialogTitle');
+        if (dialogTitle) {
+            const currentUser = getCurrentUser();
+            const otherUser = thread.buyer_id === currentUser.id 
+                ? thread.seller_nickname 
+                : thread.buyer_nickname;
+            dialogTitle.textContent = `与 ${otherUser} 聊天`;
+        }
+        
+        // 更新商品信息
+        const productInfo = document.getElementById('messageProductInfo');
+        if (productInfo) {
+            productInfo.innerHTML = `
+                <div style="padding: 10px; background: #f9fafb; border-radius: 8px;">
+                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 5px;">
+                        ${thread.listing_title}
+                    </div>
+                    <div style="color: #dc2626; font-weight: bold; font-size: 16px;">
+                        $${thread.listing_price}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 保存会话信息
+        currentThread = { seller: { id: thread.seller_id } };
+        
+        // 加载消息
+        await loadMessages(threadId);
+        
+        // 打开对话框
+        openModal('messageDialog');
+        
+    } catch (error) {
+        console.error('打开会话失败:', error);
+        showError('打开会话失败');
     }
-    
-    loadMessages(threadId);
-    openModal('messageDialog');
 }
 
 // ===== 辅助函数 =====
@@ -423,7 +495,11 @@ async function getListing(listingId) {
         
         // 如果本地没有，从API获取
         if (!listing) {
-            listing = await API.getListing(listingId);
+            const response = await fetch(`/api/listings/${listingId}`);
+            if (!response.ok) {
+                throw new Error('获取商品失败');
+            }
+            listing = await response.json();
         }
         
         return listing;
@@ -475,50 +551,10 @@ function escapeHtml(text) {
 }
 
 /**
- * 获取当前用户
+ * 显示错误信息
  */
-function getCurrentUser() {
-    const currentState = getState();
-    return currentState.currentUser || {
-        id: Math.floor(Math.random() * 1000) + 1,
-        nickname: '用户' + Math.floor(Math.random() * 100)
-    };
-}
-
-/**
- * 获取状态
- */
-function getState() {
-    // 这个函数假设已在 state.js 中定义
-    if (typeof window.appState !== 'undefined') {
-        return window.appState;
-    }
-    return {
-        currentUser: null,
-        listings: [],
-        currentCommunity: null,
-        currentCategory: 'all'
-    };
-}
-
-/**
- * 打开模态框
- */
-function openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add('active');
-    }
-}
-
-/**
- * 关闭模态框
- */
-function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove('active');
-    }
+function showError(message) {
+    alert('❌ ' + message);
 }
 
 // ===== 初始化 =====
@@ -542,4 +578,8 @@ function initContactSeller() {
 }
 
 // 页面加载时初始化
-document.addEventListener('DOMContentLoaded', initContactSeller);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initContactSeller);
+} else {
+    initContactSeller();
+}
