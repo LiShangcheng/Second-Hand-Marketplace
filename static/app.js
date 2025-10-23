@@ -1,6 +1,8 @@
 /**
- * 主应用逻辑模块
- * Main Application Logic
+ * 主应用逻辑模块 - 最终修复版
+ * Main Application Logic - Final Fixed Version
+ * 
+ * 注意：contactSeller() 函数在 contact-seller.js 中定义
  */
 
 /**
@@ -135,13 +137,8 @@ function showListingDetailFromSearch(listingId) {
     showListingDetail(listingId);
 }
 
-/**
- * 联系卖家
- */
-async function contactSeller(listingId) {
-    UI.showSuccess('联系卖家功能开发中...\n将打开私信对话框');
-    closeModal('detailModal');
-}
+// ⚠️ 注意：contactSeller() 函数在 contact-seller.js 中定义
+// 这里不需要重复定义！
 
 /**
  * 举报商品
@@ -236,6 +233,9 @@ function switchTab(tab) {
         document.getElementById('searchResultsContainer').style.display = 'none';
         document.getElementById('popularSearchesSection').style.display = 'block';
         document.getElementById('searchHistorySection').style.display = 'block';
+    } else if (tab === 'messages') {
+        // 🔧 修复：加载消息列表页面
+        loadMessagesPage();
     }
 }
 
@@ -354,7 +354,7 @@ function getMockListings() {
             price: 45,
             category: 'textbook',
             meetup_point: 'Dibner Library',
-            user: { verify_status: 'email_verified' }
+            user: { id: 2, verify_status: 'email_verified', nickname: '学生A' }
         },
         {
             id: 2,
@@ -362,7 +362,7 @@ function getMockListings() {
             price: 30,
             category: 'furniture',
             meetup_point: 'Lipton Hall',
-            user: { verify_status: 'phone_verified' }
+            user: { id: 2, verify_status: 'phone_verified', nickname: '学生B' }
         },
         {
             id: 3,
@@ -370,7 +370,7 @@ function getMockListings() {
             price: 60,
             category: 'electronics',
             meetup_point: 'MetroTech Center',
-            user: { verify_status: 'email_verified' }
+            user: { id: 2, verify_status: 'email_verified', nickname: '学生C' }
         },
         {
             id: 4,
@@ -378,7 +378,7 @@ function getMockListings() {
             price: 15,
             category: 'dorm_supplies',
             meetup_point: 'Clark Street',
-            user: { verify_status: 'phone_verified' }
+            user: { id: 2, verify_status: 'phone_verified', nickname: '学生D' }
         },
         {
             id: 5,
@@ -386,7 +386,7 @@ function getMockListings() {
             price: 10,
             category: 'textbook',
             meetup_point: 'Rogers Hall',
-            user: { verify_status: 'email_verified' }
+            user: { id: 2, verify_status: 'email_verified', nickname: '学生E' }
         },
         {
             id: 6,
@@ -394,7 +394,7 @@ function getMockListings() {
             price: 25,
             category: 'electronics',
             meetup_point: '3rd Ave',
-            user: { verify_status: 'phone_verified' }
+            user: { id: 2, verify_status: 'phone_verified', nickname: '学生F' }
         }
     ];
 }
