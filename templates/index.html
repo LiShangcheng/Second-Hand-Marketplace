@@ -229,7 +229,7 @@
         </div>
     </div>
 
-    <!-- 详情模态框 -->
+    <!-- 商品详情模态框 -->
     <div class="modal" id="detailModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -240,11 +240,47 @@
         </div>
     </div>
 
+    <!-- 消息对话框 - 核心功能 -->
+    <div class="modal" id="messageDialog">
+        <div class="modal-content" style="max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="messageDialogTitle">与卖家聊天</h2>
+                <button class="close-btn" onclick="closeMessageDialog()">&times;</button>
+            </div>
+            
+            <!-- 商品信息 -->
+            <div id="messageProductInfo" style="border-bottom: 1px solid #e5e5e5; padding-bottom: 15px; margin-bottom: 15px;">
+                <!-- 动态填充 -->
+            </div>
+            
+            <!-- 消息列表 -->
+            <div id="messagesContainer" style="flex: 1; overflow-y: auto; margin-bottom: 15px; padding: 10px; 
+                                              background: #fafafa; border-radius: 8px; display: flex; flex-direction: column;">
+                <div class="loading">加载消息中...</div>
+            </div>
+            
+            <!-- 消息输入框 -->
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="messageInput" class="form-input" 
+                       placeholder="输入消息... (Enter 发送)"
+                       style="flex: 1; margin: 0; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px;">
+                <button id="messageSendBtn" class="submit-btn" onclick="sendMessage()" 
+                        style="margin: 0; width: auto; padding: 10px 20px;">
+                    发送
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- JavaScript Files -->
+    <!-- 基础模块 -->
     <script src="/static/state.js"></script>
     <script src="/static/api.js"></script>
     <script src="/static/ui.js"></script>
     <script src="/static/search.js"></script>
+    
+    <!-- 核心功能模块 -->
+    <script src="/static/contact-seller.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
