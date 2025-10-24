@@ -3,38 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NYU二手交易平台</title>
+    <title>二手交易平台</title>
     
     <!-- CSS Files -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/model.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
 </head>
-<body>
+<body class="cyber-body">
+    <div class="data-mesh"></div>
+    <div class="scanline-overlay"></div>
+    <div class="orb orb-left"></div>
+    <div class="orb orb-right"></div>
     <!-- 导航栏 -->
     <div class="navbar">
-        <h1>🎓 NYU二手交易</h1>
-        <div class="nav-icons">
-            <button onclick="showNotifications()">
-                🔔
-                <span class="badge" id="notificationBadge" style="display: none;">0</span>
-            </button>
-            <button onclick="showMessages()">
-                💬
-                <span class="badge" id="messageBadge" style="display: none;">0</span>
-            </button>
+        <h1 class="navbar-title">
+            <span class="brand-cn">转转屋交易局</span>
+            <span class="brand-en glitch-text" data-text="Zhuan Zhuan Exchange">Zhuan Zhuan Exchange</span>
+        </h1>
+        <div class="nav-right">
+            <div class="nav-auth" id="navAuthArea">
+                <a href="{{ url_for('login_page') }}" class="auth-link">登录</a>
+                <span class="divider">|</span>
+                <a href="{{ url_for('register_page') }}" class="auth-link highlight">注册</a>
+            </div>
+            <div class="nav-icons">
+                <button onclick="showNotifications()">
+                    🔔
+                    <span class="badge" id="notificationBadge" style="display: none;">0</span>
+                </button>
+                <button onclick="showMessages()">
+                    💬
+                    <span class="badge" id="messageBadge" style="display: none;">0</span>
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- 首页 -->
+    <!-- 商城 -->
     <div class="page active" id="homePage">
+        <div class="hud-banner">
+            <h2 class="hud-title glitch-text" data-text="MARKET CORE">MARKET CORE</h2>
+            <p class="hud-subtitle">
+                在这片霓虹网格中，NYU Tandon 学生实时交换教材、电子与宿舍装备。
+                启动筛选芯片、锁定目标物品，让下一件战利品闪现你的仓库。
+            </p>
+        </div>
         <div class="community-selector" id="communitySelector"></div>
+        <div class="neon-divider"></div>
         <div class="search-bar">
-            <input type="text" class="search-input" id="searchInput" 
-                   placeholder="搜索课程代码、物品名称..." 
+            <input type="text" class="search-input search-trigger" id="searchInput" 
+                   placeholder="输入信号代号 / 物品编码..." 
                    onfocus="switchToSearchPage()" 
                    onclick="switchToSearchPage()" 
-                   readonly style="cursor: pointer;">
+                   readonly>
         </div>
         <div class="filter-bar" id="filterBar">
             <div class="filter-chip active" data-category="all" onclick="filterByCategory('all')">全部</div>
@@ -42,6 +64,7 @@
             <div class="filter-chip" data-category="furniture" onclick="filterByCategory('furniture')">🪑 家具</div>
             <div class="filter-chip" data-category="electronics" onclick="filterByCategory('electronics')">💻 电子产品</div>
             <div class="filter-chip" data-category="dorm_supplies" onclick="filterByCategory('dorm_supplies')">🛏️ 宿舍用品</div>
+            <div class="filter-chip" data-category="rental" onclick="filterByCategory('rental')">🏢 租房</div>
             <div class="filter-chip" data-category="other" onclick="filterByCategory('other')">🎮 其他</div>
         </div>
         <div class="listings-container" id="listingsContainer">
@@ -53,48 +76,47 @@
     <div class="page" id="searchPage">
         <div class="search-page">
             <!-- 搜索框 -->
-            <div style="background: white; padding: 15px 20px; margin-bottom: 20px; border-radius: 12px;">
+            <div class="neon-panel search-card">
                 <input type="text" class="search-input" id="searchPageInput" 
-                       placeholder="搜索课程代码、物品名称..." 
+                       placeholder="输入信号代号 / 物品编码..." 
                        onkeyup="handleSearchPageInput(event)">
             </div>
             
             <!-- 搜索结果 -->
             <div id="searchResultsContainer" style="display: none;">
-                <div style="background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-                    <h3 style="font-size: 16px; margin-bottom: 15px;">🔍 搜索结果</h3>
+                <div class="neon-panel search-results-panel">
+                    <h3 class="panel-title">🔎 信号返回</h3>
                     <div id="searchResultsList"></div>
                 </div>
             </div>
             
             <!-- 热门搜索 -->
             <div class="popular-searches" id="popularSearchesSection">
-                <h3>🔥 热门搜索</h3>
+                <h3>⚡ 热门信号</h3>
                 <div class="search-tags" id="popularTags"></div>
             </div>
             
             <!-- 搜索历史 -->
             <div class="popular-searches" id="searchHistorySection">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="margin: 0;">📖 搜索历史</h3>
-                    <button onclick="clearSearchHistory()" 
-                            style="background: none; border: none; color: #6b7280; font-size: 14px; cursor: pointer;">
+                <div class="history-header">
+                    <h3 class="panel-title">🧠 搜索记忆</h3>
+                    <button onclick="clearSearchHistory()" class="panel-action">
                         清空
                     </button>
                 </div>
                 <div class="search-tags" id="historyTags">
-                    <div style="color: #6b7280; font-size: 14px;">暂无搜索历史</div>
+                    <div class="muted-text">暂无搜索历史</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 消息页面 -->
+    <!-- 讯息页面 -->
     <div class="page" id="messagesPage">
         <div class="messages-page">
             <div class="thread-list" id="threadList">
-                <div style="padding: 40px; text-align: center; color: #6b7280;">
-                    💬<br>暂无消息
+                <div class="empty-placeholder">
+                    💬<br>频道静默中
                 </div>
             </div>
         </div>
@@ -104,22 +126,30 @@
     <div class="page" id="profilePage">
         <div class="profile-page">
             <div class="profile-header">
-                <div class="profile-avatar">👤</div>
+                <div class="profile-avatar" id="profileAvatar">
+                    <img id="profileAvatarImg" class="profile-avatar-img" alt="用户头像">
+                    <div class="profile-avatar-fallback" id="profileAvatarFallback">👤</div>
+                    <button type="button" class="avatar-edit-btn" id="avatarEditButton" onclick="triggerAvatarUpload()" title="编辑头像">
+                        ✏️
+                    </button>
+                    <input type="file" id="avatarUploadInput" class="avatar-input" accept="image/*" onchange="handleAvatarFileChange(event)">
+                </div>
                 <div class="profile-name" id="profileName">测试用户</div>
                 <div class="profile-status">
-                    <span class="user-badge">NYU认证</span>
+                    <span class="user-badge">认证级别：ALPHA</span>
                 </div>
             </div>
+            <div class="neon-divider"></div>
             
             <div class="menu-list">
-                <div class="menu-item" onclick="alert('我的发布功能开发中...')">
+                <div class="menu-item" onclick="openMyListingsModal()">
                     <div class="menu-item-left">
                         <span class="menu-icon">📦</span>
                         <span>我的发布</span>
                     </div>
                     <span>›</span>
                 </div>
-                <div class="menu-item" onclick="alert('我的收藏功能开发中...')">
+                <div class="menu-item" onclick="openFavoritesModal()">
                     <div class="menu-item-left">
                         <span class="menu-icon">❤️</span>
                         <span>我的收藏</span>
@@ -158,7 +188,7 @@
     <div class="bottom-nav">
         <a class="nav-item active" onclick="switchTab('home')">
             <span>🏠</span>
-            <span>首页</span>
+            <span>商城</span>
         </a>
         <a class="nav-item" onclick="switchTab('search')">
             <span>🔍</span>
@@ -166,11 +196,11 @@
         </a>
         <a class="nav-item" onclick="switchTab('messages')">
             <span>💬</span>
-            <span>消息</span>
+            <span>讯息</span>
         </a>
         <a class="nav-item" onclick="switchTab('profile')">
             <span>👤</span>
-            <span>我的</span>
+            <span>基地</span>
         </a>
     </div>
 
@@ -195,6 +225,7 @@
                         <option value="furniture">家具</option>
                         <option value="electronics">电子产品</option>
                         <option value="dorm_supplies">宿舍用品</option>
+                        <option value="rental">租房</option>
                         <option value="other">其他</option>
                     </select>
                 </div>
@@ -214,9 +245,14 @@
                               placeholder="描述物品状况、购买时间等..."></textarea>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">面交地点 *</label>
+                    <label class="form-label">上传图片</label>
+                    <input type="file" class="form-input" id="publishImages" accept="image/*" multiple>
+                    <div class="form-note">支持上传多张图片（PNG/JPG/JPEG/GIF/WebP）</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">推荐面交地点 *</label>
                     <select class="form-select" id="publishMeetupPoint" required>
-                        <option value="">请选择面交地点</option>
+                        <option value="">请选择推荐面交地点</option>
                         <option value="Dibner Library">Dibner Library</option>
                         <option value="MetroTech Center">MetroTech Center</option>
                         <option value="Rogers Hall">Rogers Hall</option>
@@ -226,6 +262,38 @@
                 </div>
                 <button type="submit" class="submit-btn">发布</button>
             </form>
+        </div>
+    </div>
+
+    <!-- 我的发布模态框 -->
+    <div class="modal" id="myListingsModal">
+        <div class="modal-content wide">
+            <div class="modal-header">
+                <h2 class="modal-title">我的发布</h2>
+                <button class="close-btn" onclick="closeModal('myListingsModal')">&times;</button>
+            </div>
+            <div id="myListingsContainer" class="profile-listings">
+                <div class="profile-empty">
+                    <div class="empty-state-icon">🔐</div>
+                    请先登录后查看你的发布
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 我的收藏模态框 -->
+    <div class="modal" id="myFavoritesModal">
+        <div class="modal-content wide">
+            <div class="modal-header">
+                <h2 class="modal-title">我的收藏</h2>
+                <button class="close-btn" onclick="closeModal('myFavoritesModal')">&times;</button>
+            </div>
+            <div id="myFavoritesContainer" class="profile-listings">
+                <div class="profile-empty">
+                    <div class="empty-state-icon">🔐</div>
+                    请先登录后查看你的收藏
+                </div>
+            </div>
         </div>
     </div>
 
@@ -240,32 +308,29 @@
         </div>
     </div>
 
-    <!-- 消息对话框 - 核心功能 -->
+    <!-- 讯息对话框 - 核心功能 -->
     <div class="modal" id="messageDialog">
-        <div class="modal-content" style="max-height: 80vh; display: flex; flex-direction: column;">
+        <div class="modal-content flex-column">
             <div class="modal-header">
                 <h2 class="modal-title" id="messageDialogTitle">与卖家聊天</h2>
                 <button class="close-btn" onclick="closeMessageDialog()">&times;</button>
             </div>
             
             <!-- 商品信息 -->
-            <div id="messageProductInfo" style="border-bottom: 1px solid #e5e5e5; padding-bottom: 15px; margin-bottom: 15px;">
+            <div id="messageProductInfo" class="message-product-info">
                 <!-- 动态填充 -->
             </div>
             
-            <!-- 消息列表 -->
-            <div id="messagesContainer" style="flex: 1; overflow-y: auto; margin-bottom: 15px; padding: 10px; 
-                                              background: #fafafa; border-radius: 8px; display: flex; flex-direction: column;">
-                <div class="loading">加载消息中...</div>
+            <!-- 讯息列表 -->
+            <div id="messagesContainer" class="messages-scroll">
+                <div class="loading">加载讯息中...</div>
             </div>
             
-            <!-- 消息输入框 -->
-            <div style="display: flex; gap: 10px;">
+            <!-- 讯息输入框 -->
+            <div class="message-input-row">
                 <input type="text" id="messageInput" class="form-input" 
-                       placeholder="输入消息... (Enter 发送)"
-                       style="flex: 1; margin: 0; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                <button id="messageSendBtn" class="submit-btn" onclick="sendMessage()" 
-                        style="margin: 0; width: auto; padding: 10px 20px;">
+                       placeholder="输入讯息... (Enter 发送)">
+                <button id="messageSendBtn" class="submit-btn message-send-btn" onclick="sendMessage()">
                     发送
                 </button>
             </div>
@@ -274,13 +339,13 @@
 
     <!-- JavaScript Files -->
     <!-- 基础模块 -->
-    <script src="/static/state.js"></script>
-    <script src="/static/api.js"></script>
-    <script src="/static/ui.js"></script>
-    <script src="/static/search.js"></script>
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
     
     <!-- 核心功能模块 -->
-    <script src="/static/contact_seller.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="{{ url_for('static', filename='js/contact_seller.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

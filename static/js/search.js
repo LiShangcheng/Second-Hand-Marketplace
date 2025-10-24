@@ -11,7 +11,7 @@ let searchTimeout = null;
 async function loadPopularSearches() {
     const tags = [
         'CS-UY 1134', 'MA-UY 1024', '计算器', '椅子', 'Python',
-        '微波炉', 'iPad', '台灯', '数据结构', '显示器'
+        '微波炉', 'iPad', '台灯', '数据结构', '显示器', '租房'
     ];
     
     const container = document.getElementById('popularTags');

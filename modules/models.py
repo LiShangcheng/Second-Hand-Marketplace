@@ -27,6 +27,7 @@ class Category(Enum):
     FURNITURE = "furniture"  # 家具
     ELECTRONICS = "electronics"  # 电子产品
     DORM_SUPPLIES = "dorm_supplies"  # 宿舍用品
+    RENTAL = "rental"  # 租房
     OTHER = "other"  # 其他
 
 class ThreadStatus(Enum):
@@ -110,7 +111,7 @@ class Listing:
         self.course_code = None  # 课程代码（教材类）
         self.isbn = None  # ISBN码（教材类）
         self.community_id = community_id  # 所属社区
-        self.meetup_point = ""  # 面交地点
+        self.meetup_point = ""  # 推荐面交地点
         self.status = ListingStatus.ACTIVE  # 状态
         self.view_count = 0  # 浏览次数
         self.created_at = datetime.now()
@@ -261,12 +262,14 @@ def get_sample_data():
     listings = [
         Listing(1, "CS-UY 1134 Introduction to Programming", 45, Category.TEXTBOOK, 1),
         Listing(1, "宿舍椅子 九成新 可调节高度", 30, Category.FURNITURE, 1),
-        Listing(2, "TI-84 Plus 计算器 工程课必备", 60, Category.ELECTRONICS, 1)
+        Listing(2, "TI-84 Plus 计算器 工程课必备", 60, Category.ELECTRONICS, 1),
+        Listing(3, "Brooklyn 合租房 月租2200", 2200, Category.RENTAL, 2)
     ]
     listings[0].course_code = "CS-UY 1134"
     listings[0].meetup_point = "Dibner Library"
     listings[1].meetup_point = "Lipton Hall"
     listings[2].meetup_point = "MetroTech Center"
+    listings[3].meetup_point = "Washington Square"
     
     return {
         'communities': communities,

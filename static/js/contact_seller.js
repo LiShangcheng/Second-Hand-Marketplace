@@ -2,12 +2,12 @@
  * 联系卖家功能 - 修复版
  * Contact Seller Module - Fixed Version
  * 
- * 功能：处理用户点击"联系卖家"到发送消息的完整流程
+ * 功能：处理用户点击"联系卖家"到发送讯息的完整流程
  */
 
 // ===== 状态管理 =====
 let currentThreadId = null;
-let currentThread = null;
+let currentThread = null; // { threadId, listing, buyerId, sellerId, buyerNickname, sellerNickname }
 let messageRefreshInterval = null;
 
 /**
@@ -21,6 +21,11 @@ async function contactSeller(listingId) {
         // 1. 获取商品信息和当前用户
         const listing = await getListing(listingId);
         const currentUser = getCurrentUser();
+        
+        if (!currentUser || !currentUser.id) {
+            showError('请先登录后再联系卖家');
+            return;
+        }
         
         if (!listing) {
             showError('商品不存在');
@@ -54,7 +59,7 @@ async function contactSeller(listingId) {
         const threadId = threadResponse.id || threadResponse;
         console.log('会话创建成功，ID:', threadId);
         
-        // 4. 打开消息对话框
+        // 4. 打开讯息对话框
         await openMessageDialog(threadId, listing, listing.user);
         
         // 5. 关闭详情弹窗
@@ -97,26 +102,48 @@ async function createThread(buyerId, sellerId, listingId) {
     }
 }
 
-// ===== 消息对话框管理 =====
+// ===== 讯息对话框管理 =====
 
 /**
- * 打开消息对话框
+ * 打开讯息对话框
  */
 async function openMessageDialog(threadId, listing, seller) {
     try {
+        const currentUser = getCurrentUser();
         currentThreadId = threadId;
-        currentThread = { listing, seller };
+        currentThread = {
+            threadId,
+            listing: listing || null,
+            buyerId: currentUser?.id || null,
+            sellerId: seller?.id || null,
+            buyerNickname: currentUser?.nickname || null,
+            sellerNickname: seller?.nickname || null
+        };
+        
+        // 如果传入的 listing 信息缺失，从接口补全
+        if ((!listing || !listing.meetup_point || !listing.category) && listing?.id) {
+            try {
+                const freshListing = await getListing(listing.id);
+                if (freshListing) {
+                    currentThread.listing = freshListing;
+                    listing = freshListing;
+                }
+            } catch (fetchError) {
+                console.warn('补全商品信息失败:', fetchError);
+            }
+        }
         
         // 1. 更新对话框标题
         const dialogTitle = document.getElementById('messageDialogTitle');
         if (dialogTitle) {
-            dialogTitle.textContent = `与 ${seller.nickname || '卖家'} 聊天`;
+            const sellerName = getChatPartnerNickname();
+            dialogTitle.textContent = sellerName ? `与 ${sellerName} 的聊天` : '聊天';
         }
         
         // 2. 更新商品信息
-        renderProductInfo(listing);
+        renderProductInfo(currentThread.listing || listing);
         
-        // 3. 加载消息列表
+        // 3. 加载讯息列表
         await loadMessages(threadId);
         
         // 4. 打开对话框
@@ -140,27 +167,22 @@ async function openMessageDialog(threadId, listing, seller) {
 function renderProductInfo(listing) {
     const productInfo = document.getElementById('messageProductInfo');
     if (!productInfo) return;
+    if (!listing) {
+        productInfo.innerHTML = '';
+        return;
+    }
     
     const placeholderColor = getColorByCategory(listing.category);
     
     productInfo.innerHTML = `
-        <div style="display: flex; gap: 10px; padding: 10px; background: #f9fafb; border-radius: 8px; margin-bottom: 15px;">
-            <div style="width: 60px; height: 60px; background: ${placeholderColor}; 
-                        border-radius: 8px; display: flex; align-items: center; justify-content: center; 
-                        color: white; font-size: 12px; text-align: center; flex-shrink: 0; font-weight: bold;">
-                ${listing.title.substring(0, 10)}
+        <div class="message-product-card">
+            <div class="message-product-thumb" style="background:${placeholderColor};">
+                ${(listing.title || '').substring(0, 10)}
             </div>
-            <div style="flex: 1;">
-                <div style="font-weight: 500; font-size: 14px; margin-bottom: 5px; 
-                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    ${listing.title}
-                </div>
-                <div style="color: #dc2626; font-weight: bold; font-size: 16px;">
-                    $${listing.price}
-                </div>
-                <div style="font-size: 12px; color: #6b7280; margin-top: 3px;">
-                    ${listing.meetup_point || '面交地点未设置'}
-                </div>
+            <div class="message-product-body">
+                <div class="message-product-title">${listing.title}</div>
+                <div class="message-product-price">$${listing.price}</div>
+                <div class="message-product-meta">📍 ${listing.meetup_point || '推荐面交地点未设置'}</div>
             </div>
         </div>
     `;
@@ -175,13 +197,14 @@ function getColorByCategory(category) {
         furniture: '#ec4899',
         electronics: '#3b82f6',
         dorm_supplies: '#8b5cf6',
+        rental: '#22d3ee',
         other: '#6b7280'
     };
     return colors[category] || '#9ca3af';
 }
 
 /**
- * 关闭消息对话框
+ * 关闭讯息对话框
  */
 function closeMessageDialog() {
     currentThreadId = null;
@@ -193,55 +216,56 @@ function closeMessageDialog() {
     closeModal('messageDialog');
 }
 
-// ===== 消息加载和显示 =====
+// ===== 讯息加载和显示 =====
 
 /**
- * 加载消息列表
+ * 加载讯息列表
  */
 async function loadMessages(threadId) {
     try {
         const messagesContainer = document.getElementById('messagesContainer');
         if (!messagesContainer) {
-            console.error('消息容器不存在');
+            console.error('讯息容器不存在');
             return;
         }
         
-        messagesContainer.innerHTML = '<div class="loading" style="text-align: center; color: #9ca3af; padding: 20px;">加载消息中...</div>';
+        messagesContainer.innerHTML = '<div class="loading" style="text-align: center; color: #9ca3af; padding: 20px;">加载讯息中...</div>';
         
         const response = await fetch(`/api/threads/${threadId}/messages`);
         
         if (!response.ok) {
-            throw new Error('加载消息失败');
+            throw new Error('加载讯息失败');
         }
         
         const messages = await response.json();
-        console.log('获取消息:', messages);
+        console.log('获取讯息:', messages);
         
         if (!messages || messages.length === 0) {
             messagesContainer.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 20px;">开始新对话</div>';
         } else {
             messagesContainer.innerHTML = messages.map(msg => renderMessage(msg)).join('');
             
-            // 滚动到最新消息
+            // 滚动到最新讯息
             setTimeout(() => {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, 100);
         }
     } catch (error) {
-        console.error('加载消息失败:', error);
+        console.error('加载讯息失败:', error);
         const messagesContainer = document.getElementById('messagesContainer');
         if (messagesContainer) {
-            messagesContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 20px;">加载消息失败</div>';
+            messagesContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 20px;">加载讯息失败</div>';
         }
     }
 }
 
 /**
- * 渲染单个消息
+ * 渲染单个讯息
  */
 function renderMessage(message) {
     const currentUser = getCurrentUser();
-    const isOwn = message.from_user_id === currentUser.id;
+    const currentUserId = currentUser && currentUser.id ? currentUser.id : null;
+    const isOwn = currentUserId ? message.from_user_id === currentUserId : false;
     
     return `
         <div style="display: flex; margin-bottom: 12px; justify-content: ${isOwn ? 'flex-end' : 'flex-start'};">
@@ -259,24 +283,24 @@ function renderMessage(message) {
     `;
 }
 
-// ===== 消息发送 =====
+// ===== 讯息发送 =====
 
 /**
- * 发送消息
+ * 发送讯息
  */
 async function sendMessage() {
     try {
         const input = document.getElementById('messageInput');
         const content = input.value.trim();
         
-        // 1. 验证消息内容
+        // 1. 验证讯息内容
         if (!content) {
-            showError('请输入消息内容');
+            showError('请输入讯息内容');
             return;
         }
         
         if (content.length > 1000) {
-            showError('消息过长（最多1000字）');
+            showError('讯息过长（最多1000字）');
             return;
         }
         
@@ -286,10 +310,15 @@ async function sendMessage() {
         }
         
         const currentUser = getCurrentUser();
-        const sellerId = getSellerId();
+        if (!currentUser || !currentUser.id) {
+            showError('请先登录后再发送讯息');
+            return;
+        }
+
+        const receiverId = getChatPartnerId();
         
-        if (!sellerId) {
-            showError('无法获取卖家ID');
+        if (!receiverId) {
+            showError('无法确定接收方，请刷新页面后重试');
             return;
         }
         
@@ -298,11 +327,11 @@ async function sendMessage() {
         sendBtn.disabled = true;
         sendBtn.textContent = '发送中...';
         
-        // 3. 发送消息到后端
-        console.log('发送消息...', {
+        // 3. 发送讯息到后端
+        console.log('发送讯息...', {
             thread_id: currentThreadId,
             from_user_id: currentUser.id,
-            to_user_id: sellerId,
+            to_user_id: receiverId,
             content: content
         });
         
@@ -314,7 +343,7 @@ async function sendMessage() {
             body: JSON.stringify({
                 thread_id: currentThreadId,
                 from_user_id: currentUser.id,
-                to_user_id: sellerId,
+                to_user_id: receiverId,
                 content: content
             })
         });
@@ -325,12 +354,12 @@ async function sendMessage() {
         }
         
         const result = await response.json();
-        console.log('消息发送成功:', result);
+        console.log('讯息发送成功:', result);
         
         // 4. 清空输入框
         input.value = '';
         
-        // 5. 重新加载消息列表
+        // 5. 重新加载讯息列表
         await loadMessages(currentThreadId);
         
         // 6. 恢复按钮
@@ -338,8 +367,8 @@ async function sendMessage() {
         sendBtn.textContent = '发送';
         
     } catch (error) {
-        console.error('发送消息失败:', error);
-        showError('发送消息失败: ' + error.message);
+        console.error('发送讯息失败:', error);
+        showError('发送讯息失败: ' + error.message);
         
         // 恢复按钮
         const sendBtn = document.getElementById('messageSendBtn');
@@ -351,17 +380,38 @@ async function sendMessage() {
 }
 
 /**
- * 获取卖家ID
+ * 获取聊天对象ID
  */
-function getSellerId() {
+function getChatPartnerId() {
     if (!currentThread) return null;
-    return currentThread.seller ? currentThread.seller.id : null;
+    const currentUser = getCurrentUser();
+    if (!currentUser || !currentUser.id) return null;
+    
+    if (currentUser.id === currentThread.buyerId) {
+        return currentThread.sellerId;
+    }
+    if (currentUser.id === currentThread.sellerId) {
+        return currentThread.buyerId;
+    }
+    return null;
 }
 
-// ===== 消息列表页面 =====
+/**
+ * 获取聊天对象名称
+ */
+function getChatPartnerNickname() {
+    if (!currentThread) return null;
+    if (currentThread.sellerNickname) return currentThread.sellerNickname;
+    if (currentThread.listing && currentThread.listing.user && currentThread.listing.user.nickname) {
+        return currentThread.listing.user.nickname;
+    }
+    return '卖家';
+}
+
+// ===== 讯息列表页面 =====
 
 /**
- * 加载消息列表页面（显示所有会话）
+ * 加载讯息列表页面（显示所有会话）
  */
 async function loadMessagesPage() {
     try {
@@ -370,6 +420,11 @@ async function loadMessagesPage() {
         
         if (!threadList) {
             console.error('线程容器不存在');
+            return;
+        }
+        
+        if (!currentUser || !currentUser.id) {
+            threadList.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px;">请先登录查看讯息</div>';
             return;
         }
         
@@ -385,17 +440,17 @@ async function loadMessagesPage() {
         console.log('获取会话列表:', threads);
         
         if (!threads || threads.length === 0) {
-            threadList.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px;">💬<br>暂无消息</div>';
+            threadList.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px;">💬<br>暂无讯息</div>';
             return;
         }
         
         threadList.innerHTML = threads.map(thread => renderThreadItem(thread)).join('');
         
     } catch (error) {
-        console.error('加载消息列表失败:', error);
+        console.error('加载讯息列表失败:', error);
         const threadList = document.getElementById('threadList');
         if (threadList) {
-            threadList.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 40px;">加载消息列表失败</div>';
+            threadList.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 40px;">加载讯息列表失败</div>';
         }
     }
 }
@@ -405,33 +460,34 @@ async function loadMessagesPage() {
  */
 function renderThreadItem(thread) {
     const currentUser = getCurrentUser();
-    const otherUser = thread.buyer_id === currentUser.id 
-        ? { id: thread.seller_id, nickname: thread.seller_nickname }
-        : { id: thread.buyer_id, nickname: thread.buyer_nickname };
+    const isBuyer = currentUser && currentUser.id === thread.buyer_id;
+    const otherNickname = isBuyer
+        ? (thread.seller_nickname || '卖家')
+        : (thread.buyer_nickname || '买家');
     
     return `
-        <div class="thread-item" onclick="openThreadFromList(${thread.id})" 
-             style="padding: 15px; border-bottom: 1px solid #e5e5e5; cursor: pointer; 
-                    transition: background 0.2s;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div style="font-weight: 500; color: #111827;">${otherUser.nickname}</div>
-                <div style="font-size: 12px; color: #9ca3af;">${formatTime(thread.last_message_at)}</div>
+        <div class="thread-item" onclick="openThreadFromList(${thread.id})">
+            <div class="thread-header">
+                <div class="thread-title">${otherNickname}</div>
+                <div class="thread-time">${formatTime(thread.last_message_at)}</div>
             </div>
-            <div style="font-size: 13px; color: #374151; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${thread.listing_title}
-            </div>
-            <div style="font-size: 14px; color: #dc2626; font-weight: bold;">
-                $${thread.listing_price}
-            </div>
+            <div class="thread-preview">${thread.listing_title}</div>
+            <div class="thread-price">$${thread.listing_price}</div>
         </div>
     `;
 }
 
 /**
- * 从消息列表打开会话
+ * 从讯息列表打开会话
  */
 async function openThreadFromList(threadId) {
     try {
+        const currentUser = getCurrentUser();
+        if (!currentUser || !currentUser.id) {
+            showError('请先登录后再查看讯息');
+            return;
+        }
+        
         currentThreadId = threadId;
         
         // 获取会话详情
@@ -442,35 +498,47 @@ async function openThreadFromList(threadId) {
         
         const thread = await response.json();
         
+        currentThread = {
+            threadId,
+            listing: {
+                id: thread.listing_id,
+                title: thread.listing_title,
+                price: thread.listing_price,
+                meetup_point: thread.listing_meetup_point || thread.meetup_point || '',
+                category: thread.listing_category || 'other'
+            },
+            buyerId: thread.buyer_id,
+            sellerId: thread.seller_id,
+            buyerNickname: thread.buyer_nickname,
+            sellerNickname: thread.seller_nickname
+        };
+        currentThreadId = threadId;
+        
         // 更新对话框信息
         const dialogTitle = document.getElementById('messageDialogTitle');
         if (dialogTitle) {
-            const currentUser = getCurrentUser();
-            const otherUser = thread.buyer_id === currentUser.id 
-                ? thread.seller_nickname 
-                : thread.buyer_nickname;
-            dialogTitle.textContent = `与 ${otherUser} 聊天`;
+            const sellerName = thread.seller_nickname || '卖家';
+            dialogTitle.textContent = `与 ${sellerName} 的聊天`;
         }
         
         // 更新商品信息
         const productInfo = document.getElementById('messageProductInfo');
         if (productInfo) {
             productInfo.innerHTML = `
-                <div style="padding: 10px; background: #f9fafb; border-radius: 8px;">
-                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 5px;">
-                        ${thread.listing_title}
+                <div class="message-product-card">
+                    <div class="message-product-thumb">
+                        ${(thread.listing_title || '').substring(0, 10)}
                     </div>
-                    <div style="color: #dc2626; font-weight: bold; font-size: 16px;">
-                        $${thread.listing_price}
+                    <div class="message-product-body">
+                        <div class="message-product-title">${thread.listing_title}</div>
+                        <div class="message-product-price">$${thread.listing_price}</div>
+                        <div class="message-product-meta">📍 ${thread.listing_meetup_point || '推荐面交地点未设置'}</div>
                     </div>
                 </div>
             `;
         }
-        
-        // 保存会话信息
-        currentThread = { seller: { id: thread.seller_id } };
-        
-        // 加载消息
+
+        // 加载讯息
         await loadMessages(threadId);
         
         // 打开对话框
@@ -565,7 +633,7 @@ function showError(message) {
 function initContactSeller() {
     console.log('✓ 联系卖家功能已初始化');
     
-    // 为消息输入框添加Enter快捷键
+    // 为讯息输入框添加Enter快捷键
     const messageInput = document.getElementById('messageInput');
     if (messageInput) {
         messageInput.addEventListener('keypress', function(e) {

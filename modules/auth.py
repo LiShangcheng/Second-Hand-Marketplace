@@ -2,6 +2,7 @@
 用户认证和授权模块
 """
 import jwt
+import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -74,8 +75,8 @@ def token_required(f):
 
 
 def verify_email(email):
-    """验证NYU邮箱"""
-    return email.endswith('@nyu.edu')
+    """验证邮箱格式"""
+    return bool(re.match(r"^[^@]+@[^@]+\.[^@]+$", email))
 
 
 def send_verification_email(email, code):

@@ -8,12 +8,11 @@ const state = {
     currentCategory: 'all',
     listings: [],
     communities: [],
-    currentUser: {
-        id: 1,
-        nickname: '测试用户',
-        verify_status: 'email_verified'
-    },
-    searchHistory: []
+    currentUser: null,
+    searchHistory: [],
+    userListings: [],
+    userFavorites: [],
+    favoriteIds: []
 };
 
 const API_BASE_URL = '/api';
@@ -40,6 +39,27 @@ function updateListings(listings) {
 }
 
 /**
+ * 更新当前用户的发布列表
+ */
+function updateUserListings(listings) {
+    state.userListings = listings;
+}
+
+/**
+ * 更新用户收藏列表
+ */
+function updateUserFavorites(favorites) {
+    state.userFavorites = favorites;
+}
+
+/**
+ * 更新收藏的物品ID集合
+ */
+function updateFavoriteIds(ids) {
+    state.favoriteIds = Array.isArray(ids) ? ids : [];
+}
+
+/**
  * 更新社区列表
  */
 function updateCommunities(communities) {
@@ -58,6 +78,53 @@ function getState() {
  */
 function getCurrentUser() {
     return state.currentUser;
+}
+
+/**
+ * 判断是否已登录
+ */
+function isAuthenticated() {
+    return !!(state.currentUser && state.currentUser.id);
+}
+
+/**
+ * 设置当前用户
+ */
+function setCurrentUser(user) {
+    state.currentUser = user || null;
+
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        try {
+            if (user) {
+                localStorage.setItem('currentUser', JSON.stringify(user));
+            } else {
+                localStorage.removeItem('currentUser');
+            }
+        } catch (error) {
+            console.error('保存用户信息失败:', error);
+        }
+    }
+}
+
+/**
+ * 从本地存储加载当前用户
+ */
+function hydrateCurrentUserFromStorage() {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return;
+    }
+
+    try {
+        const storedUser = localStorage.getItem('currentUser');
+        if (storedUser) {
+            state.currentUser = JSON.parse(storedUser);
+        } else {
+            state.currentUser = null;
+        }
+    } catch (error) {
+        console.error('加载用户信息失败:', error);
+        state.currentUser = null;
+    }
 }
 
 /**
@@ -110,11 +177,21 @@ if (typeof module !== 'undefined' && module.exports) {
         updateCurrentCommunity,
         updateCurrentCategory,
         updateListings,
+        updateUserListings,
+        updateUserFavorites,
+        updateFavoriteIds,
         updateCommunities,
         getState,
         getCurrentUser,
+        isAuthenticated,
+        setCurrentUser,
+        hydrateCurrentUserFromStorage,
         addToSearchHistory,
         loadSearchHistory,
         clearSearchHistoryState
     };
+}
+
+if (typeof window !== 'undefined') {
+    hydrateCurrentUserFromStorage();
 }
