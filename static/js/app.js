@@ -59,10 +59,10 @@ async function loadCommunities() {
 async function selectCommunity(communityId) {
     updateCurrentCommunity(communityId);
     
-    // 更新UI
-    document.querySelectorAll('.community-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.community == communityId);
-    });
+    const dropdown = document.getElementById('communitySelector');
+    if (dropdown) {
+        dropdown.value = String(communityId);
+    }
     
     await loadListings();
 }
@@ -226,6 +226,14 @@ async function filterByCategory(category) {
     });
     
     await loadListings();
+}
+
+function handleCommunityDropdownChange(value) {
+    if (!value) return;
+    const parsed = parseInt(value, 10);
+    if (!Number.isNaN(parsed)) {
+        selectCommunity(parsed);
+    }
 }
 
 /**

@@ -18,7 +18,7 @@
     <!-- 导航栏 -->
     <div class="navbar">
         <h1 class="navbar-title">
-            <span class="brand-cn">转转屋交易局</span>
+            <span class="brand-cn">转转屋</span>
             <span class="brand-en glitch-text" data-text="Zhuan Zhuan Exchange">Zhuan Zhuan Exchange</span>
         </h1>
         <div class="nav-right">
@@ -42,15 +42,6 @@
 
     <!-- 商城 -->
     <div class="page active" id="homePage">
-        <div class="hud-banner">
-            <h2 class="hud-title glitch-text" data-text="MARKET CORE">MARKET CORE</h2>
-            <p class="hud-subtitle">
-                在这片霓虹网格中，NYU Tandon 学生实时交换教材、电子与宿舍装备。
-                启动筛选芯片、锁定目标物品，让下一件战利品闪现你的仓库。
-            </p>
-        </div>
-        <div class="community-selector" id="communitySelector"></div>
-        <div class="neon-divider"></div>
         <div class="search-bar">
             <input type="text" class="search-input search-trigger" id="searchInput" 
                    placeholder="输入信号代号 / 物品编码..." 
@@ -58,6 +49,7 @@
                    onclick="switchToSearchPage()" 
                    readonly>
         </div>
+        <div class="neon-divider"></div>
         <div class="filter-bar" id="filterBar">
             <div class="filter-chip active" data-category="all" onclick="filterByCategory('all')">全部</div>
             <div class="filter-chip" data-category="textbook" onclick="filterByCategory('textbook')">📚 教材</div>
@@ -66,6 +58,14 @@
             <div class="filter-chip" data-category="dorm_supplies" onclick="filterByCategory('dorm_supplies')">🛏️ 宿舍用品</div>
             <div class="filter-chip" data-category="rental" onclick="filterByCategory('rental')">🏢 租房</div>
             <div class="filter-chip" data-category="other" onclick="filterByCategory('other')">🎮 其他</div>
+            <div class="filter-location">
+                <label for="communitySelector" class="filter-location-label">地点</label>
+                <div class="filter-select-wrap">
+                    <select id="communitySelector" class="filter-select" onchange="handleCommunityDropdownChange(this.value)" disabled>
+                        <option value="" selected>加载地点...</option>
+                    </select>
+                </div>
+            </div>
         </div>
         <div class="listings-container" id="listingsContainer">
             <div class="loading">加载中...</div>
@@ -181,9 +181,6 @@
         </div>
     </div>
 
-    <!-- 浮动发布按钮 -->
-    <div class="fab" onclick="showPublishModal()">+</div>
-
     <!-- 底部导航 -->
     <div class="bottom-nav">
         <a class="nav-item active" onclick="switchTab('home')">
@@ -193,6 +190,10 @@
         <a class="nav-item" onclick="switchTab('search')">
             <span>🔍</span>
             <span>搜索</span>
+        </a>
+        <a class="nav-item publish-item" onclick="showPublishModal()">
+            <span class="publish-icon">+</span>
+            <span>发布</span>
         </a>
         <a class="nav-item" onclick="switchTab('messages')">
             <span>💬</span>

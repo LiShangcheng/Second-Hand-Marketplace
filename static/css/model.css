@@ -163,3 +163,91 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
+
+/* =========================================================
+   NYU Heritage Theme Overrides (Modal & Forms)
+   ========================================================= */
+.modal {
+    background: rgba(15, 10, 30, 0.55);
+}
+
+.modal-content {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: 0 40px 80px rgba(18, 10, 40, 0.18);
+    color: var(--color-text-primary);
+}
+
+.modal-content.wide {
+    padding: 32px;
+    gap: 28px;
+}
+
+.modal-title {
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+    text-shadow: none;
+    text-transform: none;
+}
+
+.close-btn {
+    background: rgba(87, 6, 140, 0.06);
+    border-color: transparent;
+    color: var(--color-text-secondary);
+    box-shadow: none;
+}
+
+.close-btn:hover {
+    background: rgba(87, 6, 140, 0.12);
+    color: var(--color-accent);
+}
+
+.form-label {
+    color: var(--color-text-secondary);
+    letter-spacing: 0.04em;
+    text-transform: none;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+    border: 1px solid var(--color-border-soft);
+    background: var(--color-bg);
+    border-radius: 14px;
+    color: var(--color-text-primary);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(87, 6, 140, 0.15);
+}
+
+.submit-btn {
+    background: linear-gradient(135deg, var(--color-gradient-start), var(--color-gradient-end));
+    color: #fff;
+    border: none;
+    letter-spacing: 0.08em;
+    text-transform: none;
+    box-shadow: var(--shadow-glow);
+}
+
+.submit-btn:hover {
+    box-shadow: 0 24px 45px rgba(87, 6, 140, 0.35);
+    color: #fff;
+}
+
+.submit-btn.secondary {
+    background: linear-gradient(135deg, #f35f91, #f38fb4);
+    box-shadow: none;
+}
+
+.submit-btn.secondary:hover {
+    box-shadow: 0 18px 35px rgba(243, 95, 145, 0.35);
+}
+
+.form-note {
+    letter-spacing: 0;
+    text-transform: none;
+}
