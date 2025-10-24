@@ -11,15 +11,21 @@ const API = {
      */
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const fetchOptions = { method: 'GET', ...options };
+        fetchOptions.headers = { ...(fetchOptions.headers || {}) };
+        const isFormData = fetchOptions.body instanceof FormData;
+
+        if (isFormData) {
+            delete fetchOptions.headers['Content-Type'];
+        } else if (fetchOptions.body && typeof fetchOptions.body !== 'string') {
+            fetchOptions.headers['Content-Type'] = fetchOptions.headers['Content-Type'] || 'application/json';
+            fetchOptions.body = JSON.stringify(fetchOptions.body);
+        } else if (!fetchOptions.body && !isFormData && !fetchOptions.headers['Content-Type']) {
+            // No body provided; leave Content-Type unset for GET/DELETE requests
+        }
         
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                },
-                ...options
-            });
+            const response = await fetch(url, fetchOptions);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -47,7 +53,7 @@ const API = {
     async post(endpoint, data = {}) {
         return this.request(endpoint, {
             method: 'POST',
-            body: JSON.stringify(data)
+            body: data
         });
     },
     
@@ -57,7 +63,7 @@ const API = {
     async put(endpoint, data = {}) {
         return this.request(endpoint, {
             method: 'PUT',
-            body: JSON.stringify(data)
+            body: data
         });
     },
     
@@ -87,6 +93,12 @@ const API = {
     },
     
     async createListing(data) {
+        if (data instanceof FormData) {
+            return this.request('/listings', {
+                method: 'POST',
+                body: data
+            });
+        }
         return this.post('/listings', data);
     },
     
@@ -109,6 +121,33 @@ const API = {
     
     async verifyUser(id, status) {
         return this.post(`/users/${id}/verify`, { status });
+    },
+    
+    async getUserListings(userId, params = {}) {
+        return this.get(`/users/${userId}/listings`, params);
+    },
+    
+    async getUserFavorites(userId, params = {}) {
+        return this.get(`/users/${userId}/favorites`, params);
+    },
+
+    async uploadAvatar(userId, file) {
+        const formData = new FormData();
+        formData.append('avatar', file);
+        return this.request(`/users/${userId}/avatar`, {
+            method: 'POST',
+            body: formData
+        });
+    },
+    
+    async addFavorite(data) {
+        return this.post('/favorites', data);
+    },
+    
+    async removeFavorite(userId, listingId) {
+        return this.request(`/favorites/${listingId}?user_id=${userId}`, {
+            method: 'DELETE'
+        });
     },
     
     // ===== 消息相关 =====

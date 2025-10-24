@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - 二手交易平台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/Auth.css') }}">
+</head>
+<body class="cyber-auth">
+    <div class="data-mesh"></div>
+    <div class="scanline-overlay"></div>
+    <div class="auth-orb orb-top"></div>
+    <div class="auth-orb orb-bottom"></div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <!-- Logo 区域 -->
+            <div class="auth-header">
+                <div class="logo">🛰️</div>
+                <h1 class="glitch-text" data-text="SIGNAL REGISTRATION">SIGNAL REGISTRATION</h1>
+                <p class="tagline">注入你的身份，加入霓虹二手交易矩阵</p>
+            </div>
+            <div class="neon-divider"></div>
+
+            <!-- 注册表单 -->
+            <form id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="registerNickname">昵称 *</label>
+                    <input type="text" id="registerNickname" name="nickname" 
+                           placeholder="设置你的代号" required 
+                           minlength="2" maxlength="20">
+                    <span class="form-hint">2-20字符 · 建议使用易记代号</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="registerEmail">邮箱 *</label>
+                    <input type="email" id="registerEmail" name="email" 
+                           placeholder="id@nyu.edu" required>
+                    <span class="form-hint">用于登录与密钥找回的校园邮箱</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="registerPassword">密码 *</label>
+                    <input type="password" id="registerPassword" name="password" 
+                           placeholder="设置访问密钥 (≥8位)" required 
+                           minlength="8">
+                    <div class="password-strength">
+                        <div class="strength-bar">
+                            <div class="strength-fill" id="strengthFill"></div>
+                        </div>
+                        <span class="strength-text" id="strengthText">密码强度</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="registerPasswordConfirm">确认密码 *</label>
+                    <input type="password" id="registerPasswordConfirm" 
+                           name="passwordConfirm" 
+                           placeholder="再次确认密钥" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="registerCommunity">所属社区 *</label>
+                    <select id="registerCommunity" name="community_id" required>
+                        <option value="">选择你的社区</option>
+                        <option value="1">Tandon 校区</option>
+                        <option value="2">Washington Square</option>
+                        <option value="3">附近居民</option>
+                    </select>
+                    <span class="form-hint">选择主要活动区域以获得精准匹配</span>
+                    <div class="community-preview" id="communityPreview" aria-live="polite"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="agreeTerms" required>
+                        <span>我已阅读并同意 <a href="#" class="link">服务条款</a> 与 <a href="#" class="link">隐私协议</a></span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <span class="btn-text">激活通行证</span>
+                    <span class="btn-loading" style="display: none;">
+                        <span class="spinner"></span> 数据写入中...
+                    </span>
+                </button>
+
+                <div class="auth-footer">
+                    已有通道? <a href="{{ url_for('login_page') }}" class="link">返回终端</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+</body>
+</html>

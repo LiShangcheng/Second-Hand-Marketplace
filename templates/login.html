@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 二手交易平台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/Auth.css') }}">
+</head>
+<body class="cyber-auth">
+    <div class="data-mesh"></div>
+    <div class="scanline-overlay"></div>
+    <div class="auth-orb orb-top"></div>
+    <div class="auth-orb orb-bottom"></div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <!-- Logo 区域 -->
+            <div class="auth-header">
+                <div class="logo">⚡️</div>
+                <h1 class="glitch-text" data-text="ACCESS TERMINAL">ACCESS TERMINAL</h1>
+                <p class="tagline">连接霓虹二手网络 · 校园专属传输通道</p>
+            </div>
+            <div class="neon-divider"></div>
+
+            <!-- 登录表单 -->
+            <form id="loginForm" class="auth-form">
+                <div class="form-group">
+                    <label for="loginEmail">邮箱</label>
+                    <input type="email" id="loginEmail" name="email" 
+                           placeholder="id@nyu.edu" required>
+                    <span class="form-hint">使用注册时绑定的校园邮箱身份识别</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">密码</label>
+                    <input type="password" id="loginPassword" name="password" 
+                           placeholder="输入访问密钥" required>
+                </div>
+
+                <div class="form-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="rememberMe">
+                        <span>保持连接</span>
+                    </label>
+                    <a href="#" class="link" id="forgotPasswordLink">重置密钥</a>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <span class="btn-text">进入系统</span>
+                    <span class="btn-loading" style="display: none;">
+                        <span class="spinner"></span> 处理中...
+                    </span>
+                </button>
+
+                <div class="divider">
+                    <span>或</span>
+                </div>
+
+                <button type="button" class="btn btn-secondary" id="wechatLoginBtn">
+                    💬 微信通道
+                </button>
+
+                <div class="auth-footer">
+                    还没有账号? <a href="{{ url_for('register_page') }}" class="link">创建访问权限</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+</body>
+</html>
