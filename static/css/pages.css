@@ -559,3 +559,188 @@
     margin-bottom: 12px;
     text-shadow: 0 0 18px rgba(255, 0, 212, 0.45);
 }
+
+/* =========================================================
+   NYU Heritage Theme Overrides (Search, Messages, Profile)
+   ========================================================= */
+.neon-panel,
+.popular-searches,
+.search-card,
+.search-results-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: var(--shadow-soft);
+}
+
+.panel-title {
+    color: var(--color-accent);
+    letter-spacing: 0.08em;
+    text-shadow: none;
+}
+
+.panel-action {
+    color: var(--color-text-secondary);
+}
+
+.panel-action:hover {
+    color: var(--color-accent);
+    letter-spacing: 0.18em;
+}
+
+.muted-text,
+.search-result-meta,
+.message-product-meta,
+.thread-preview {
+    color: var(--color-text-secondary);
+}
+
+.empty-placeholder {
+    background: var(--color-bg);
+    border-color: var(--color-border-soft);
+    color: var(--color-text-secondary);
+}
+
+.popular-searches h3 {
+    color: var(--color-text-primary);
+    text-shadow: none;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.search-tag {
+    background: var(--color-bg);
+    border-color: var(--color-border-soft);
+    color: var(--color-text-secondary);
+    text-transform: none;
+    letter-spacing: 0.02em;
+    box-shadow: none;
+}
+
+.search-tag:hover {
+    background: linear-gradient(135deg, var(--color-gradient-start), var(--color-gradient-end));
+    color: #fff;
+    border-color: transparent;
+    box-shadow: var(--shadow-glow);
+}
+
+.search-result-item {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: var(--shadow-soft);
+}
+
+.search-result-item:hover {
+    border-color: var(--color-border);
+    box-shadow: 0 24px 45px rgba(87, 6, 140, 0.16);
+}
+
+.search-result-thumb {
+    background: #f5f2ff;
+    border-color: rgba(87, 6, 140, 0.08);
+}
+
+.search-result-thumb.placeholder {
+    color: var(--color-text-secondary);
+    background: rgba(87, 6, 140, 0.08);
+}
+
+.messages-page {
+    padding-bottom: 120px;
+}
+
+.thread-list {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: var(--shadow-soft);
+}
+
+.thread-item {
+    border-color: rgba(87, 6, 140, 0.08);
+}
+
+.thread-item:hover {
+    background: rgba(87, 6, 140, 0.08);
+    border-color: transparent;
+    transform: translateX(8px);
+}
+
+.message-product-info {
+    border-color: rgba(87, 6, 140, 0.12);
+}
+
+.message-product-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: var(--shadow-soft);
+}
+
+.message-product-thumb {
+    background: linear-gradient(135deg, rgba(87, 6, 140, 0.16), rgba(15, 162, 207, 0.18));
+    color: var(--color-text-primary);
+    border-color: rgba(87, 6, 140, 0.1);
+}
+
+.message-product-price {
+    color: var(--color-accent);
+    text-shadow: none;
+    text-transform: none;
+    letter-spacing: 0.02em;
+}
+
+.messages-scroll {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.message-input-row .form-input {
+    border-radius: 14px;
+    border: 1px solid var(--color-border-soft);
+    background: var(--color-bg);
+}
+
+.message-send-btn {
+    background: linear-gradient(135deg, var(--color-gradient-start), var(--color-gradient-end));
+    color: #fff;
+    border: none;
+    box-shadow: var(--shadow-glow);
+}
+
+.message-send-btn:hover {
+    box-shadow: 0 18px 35px rgba(87, 6, 140, 0.3);
+}
+
+.profile-page {
+    background: transparent;
+    padding-bottom: 140px;
+}
+
+.profile-header {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-soft);
+    box-shadow: var(--shadow-soft);
+    text-align: left;
+}
+
+.profile-avatar {
+    background: linear-gradient(135deg, rgba(87, 6, 140, 0.85), rgba(15, 162, 207, 0.75));
+    box-shadow: var(--shadow-glow);
+}
+
+.menu-item {
+    border-color: rgba(87, 6, 140, 0.08);
+}
+
+.menu-item:hover {
+    background: rgba(87, 6, 140, 0.06);
+    border-color: transparent;
+    color: var(--color-text-primary);
+}
+
+.menu-icon {
+    filter: none;
+}
+
+.empty-state-icon {
+    text-shadow: none;
+}

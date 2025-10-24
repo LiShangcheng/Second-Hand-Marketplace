@@ -18,16 +18,27 @@ const UI = {
      * 渲染社区选择器
      */
     renderCommunities(communities, activeId) {
-        const container = document.getElementById('communitySelector');
-        if (!container) return;
-        
-        container.innerHTML = communities.map(c => `
-            <button class="community-btn ${c.id === activeId ? 'active' : ''}" 
-                    onclick="selectCommunity(${c.id})"
-                    data-community="${c.id}">
-                ${c.name}
-            </button>
+        const select = document.getElementById('communitySelector');
+        if (!select) return;
+
+        if (!communities || communities.length === 0) {
+            select.innerHTML = '<option value="" selected>暂无地点</option>';
+            select.disabled = true;
+            return;
+        }
+
+        const options = communities.map(c => `
+            <option value="${c.id}">${c.name}</option>
         `).join('');
+
+        select.innerHTML = options;
+        select.disabled = false;
+
+        const targetValue = typeof activeId !== 'undefined' && activeId !== null
+            ? String(activeId)
+            : String(communities[0].id);
+
+        select.value = targetValue;
     },
     
     /**
