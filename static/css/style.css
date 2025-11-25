@@ -5,19 +5,15 @@
 
 :root {
     --color-bg: #02030b;
-    --color-bg-alt: #080d26;
     --color-surface: rgba(10, 16, 38, 0.92);
-    --color-surface-alt: rgba(18, 24, 58, 0.92);
     --color-gradient-start: #19fff5;
     --color-gradient-end: #ff00d4;
     --color-border: rgba(25, 255, 245, 0.28);
     --color-border-soft: rgba(109, 130, 172, 0.18);
     --color-accent: #19fff5;
     --color-accent-strong: #ff00d4;
-    --color-accent-soft: rgba(25, 255, 245, 0.12);
     --color-text-primary: #e6f3ff;
     --color-text-secondary: #8ca0d0;
-    --color-danger: #ff4d7d;
     --shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.48);
     --shadow-glow: 0 0 32px rgba(25, 255, 245, 0.35);
     --blur-strength: 22px;
@@ -799,19 +795,15 @@ a:hover {
    ========================================================= */
 :root {
     --color-bg: #f7f6fb;
-    --color-bg-alt: #edeafd;
     --color-surface: #ffffff;
-    --color-surface-alt: #f4f1ff;
     --color-gradient-start: #57068c;
     --color-gradient-end: #8a52ff;
     --color-border: rgba(87, 6, 140, 0.18);
     --color-border-soft: rgba(87, 6, 140, 0.12);
     --color-accent: #57068c;
     --color-accent-strong: #0fa2cf;
-    --color-accent-soft: rgba(15, 162, 207, 0.12);
     --color-text-primary: #1f1533;
     --color-text-secondary: #5b4f79;
-    --color-danger: #c6285d;
     --shadow-soft: 0 24px 48px rgba(27, 8, 56, 0.12);
     --shadow-glow: 0 20px 45px rgba(126, 91, 209, 0.28);
     --blur-strength: 14px;
@@ -1036,6 +1028,7 @@ a:hover {
 .search-input:focus {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px rgba(87, 6, 140, 0.15);
+    background: var(--color-bg);
 }
 
 .filter-bar {

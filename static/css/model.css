@@ -11,8 +11,8 @@
     bottom: 0;
     background: rgba(2, 3, 15, 0.72);
     z-index: 1000;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: stretch;
 }
 
 .modal.active {
@@ -21,12 +21,13 @@
 
 .modal-content {
     background: linear-gradient(150deg, rgba(9, 16, 40, 0.95), rgba(24, 10, 44, 0.9));
-    border-radius: 22px;
-    width: 90%;
-    max-width: 400px;
-    max-height: 80vh;
+    border-radius: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
     overflow-y: auto;
-    padding: 26px;
+    padding: 26px 32px 32px;
     border: 1px solid rgba(25, 255, 245, 0.28);
     box-shadow: 0 38px 70px rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(calc(var(--blur-strength) * 0.65));
@@ -35,12 +36,13 @@
 }
 
 .modal-content.wide {
-    max-width: 760px;
-    padding: 30px;
+    max-width: none;
+    height: 100%;
+    padding: 32px 40px 40px;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .modal-content.wide .modal-header {
@@ -52,6 +54,12 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    position: sticky;
+    top: 0;
+    padding-top: 6px;
+    padding-bottom: 10px;
+    background: inherit;
+    z-index: 2;
 }
 
 .modal-title {

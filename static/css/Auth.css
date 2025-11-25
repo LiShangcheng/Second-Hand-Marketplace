@@ -5,14 +5,12 @@
 :root {
     --auth-bg: #010212;
     --auth-surface: rgba(9, 16, 44, 0.92);
-    --auth-surface-alt: rgba(18, 24, 58, 0.9);
     --auth-border: rgba(25, 255, 245, 0.32);
     --auth-border-soft: rgba(109, 130, 172, 0.22);
     --auth-accent: #19fff5;
     --auth-accent-strong: #ff00d4;
     --auth-text-primary: #e6f3ff;
     --auth-text-secondary: #8ca0d0;
-    --auth-danger: #ff4d7d;
     --auth-shadow: 0 28px 70px rgba(0, 0, 0, 0.6);
     --auth-font-display: 'Orbitron', 'Rajdhani', 'Segoe UI', sans-serif;
     --auth-font-body: 'Rajdhani', 'Segoe UI', sans-serif;
@@ -33,11 +31,12 @@ body {
         linear-gradient(160deg, #010212, #060b1e 58%, #010014 100%);
     min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 42px 20px;
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     color: var(--auth-text-primary);
     letter-spacing: 0.02em;
 }
@@ -122,7 +121,7 @@ body {
     backdrop-filter: blur(22px);
     animation: slideUp 0.6s ease-out;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 @keyframes slideUp {
@@ -801,14 +800,12 @@ body {
 :root {
     --auth-bg: #f8f6ff;
     --auth-surface: rgba(255, 255, 255, 0.96);
-    --auth-surface-alt: rgba(244, 241, 255, 0.96);
     --auth-border: rgba(87, 6, 140, 0.18);
     --auth-border-soft: rgba(87, 6, 140, 0.12);
     --auth-accent: #57068c;
     --auth-accent-strong: #0fa2cf;
     --auth-text-primary: #1f1533;
     --auth-text-secondary: #5b4f79;
-    --auth-danger: #c6285d;
     --auth-shadow: 0 28px 70px rgba(26, 15, 48, 0.14);
     --auth-font-display: 'Inter', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', sans-serif;
     --auth-font-body: 'Inter', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', sans-serif;
