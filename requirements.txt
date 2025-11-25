@@ -2,6 +2,7 @@ Flask==2.3.0
 flask-cors==4.0.0
 Werkzeug==2.3.0
 PyJWT==2.8.0
+pytest==7.4.3
 
 # 数据库
 # SQLite 已内置在 Python 中，无需额外安装
