@@ -1,0 +1,146 @@
+import { Category, Item } from './types';
+
+export const CATEGORIES: Category[] = [
+  'All',
+  'Textbooks',
+  'Furniture',
+  'Electronics',
+  'Dorm Essentials',
+  'Clothing',
+  'Housing',
+  'Other',
+];
+
+export const CAMPUS_LOCATIONS = ['All Locations', 'Washington Square Campus', 'Brooklyn Campus'] as const;
+
+export const MEETUP_LOCATIONS = [
+  'Bobst Library',
+  'Kimmel Center',
+  'Washington Square Park',
+  'Tisch Hall',
+  'Courant Institute',
+  'Union Square',
+  'Tandon / MetroTech',
+  'Rogers Hall',
+  'Dibner Library',
+  'Jersey Street (Tandon)',
+  'Othmer Hall',
+  'Graduate Center',
+];
+
+export const MOCK_ITEMS: Item[] = [
+  {
+    id: '1',
+    title: 'Principles of Economics (Mankiw)',
+    price: 45,
+    category: 'Textbooks',
+    description: 'Used for one semester, good condition. No highlights.',
+    imageUrl: 'https://picsum.photos/id/24/400/300',
+    location: 'Bobst Library',
+    postedAt: '2 hours ago',
+    seller: {
+      id: 'u1',
+      name: 'Sarah Chen',
+      avatar: 'https://picsum.photos/id/64/100/100',
+      email: 'sarah@nyu.edu',
+    },
+  },
+  {
+    id: '2',
+    title: 'IKEA Malm Desk - Black',
+    price: 80,
+    category: 'Furniture',
+    description: 'Moving out sale. Must pick up from Gramercy Green.',
+    imageUrl: 'https://picsum.photos/id/20/400/300',
+    location: 'Gramercy Green',
+    postedAt: '5 hours ago',
+    seller: {
+      id: 'u2',
+      name: 'Mike Ross',
+      avatar: 'https://picsum.photos/id/91/100/100',
+      email: 'mike@nyu.edu',
+    },
+  },
+  {
+    id: '3',
+    title: 'AirPods Pro (1st Gen)',
+    price: 90,
+    category: 'Electronics',
+    description: 'Cleaned and sanitized. Works perfectly. Case included.',
+    imageUrl: 'https://picsum.photos/id/30/400/300',
+    location: 'Tandon Campus',
+    postedAt: '1 day ago',
+    seller: {
+      id: 'u3',
+      name: 'Alex Kim',
+      avatar: 'https://picsum.photos/id/75/100/100',
+      email: 'alex@nyu.edu',
+    },
+  },
+  {
+    id: '4',
+    title: 'Mini Fridge',
+    price: 60,
+    category: 'Dorm Essentials',
+    description: 'Perfect for dorms. fits under the bed.',
+    imageUrl: 'https://picsum.photos/id/40/400/300',
+    location: 'Lipton Hall',
+    postedAt: '1 day ago',
+    seller: {
+      id: 'u4',
+      name: 'Jessica Li',
+      avatar: 'https://picsum.photos/id/12/100/100',
+      email: 'jess@nyu.edu',
+    },
+  },
+  {
+    id: '5',
+    title: 'Calculus: Early Transcendentals',
+    price: 55,
+    category: 'Textbooks',
+    description: 'Hardcover. Required for MATH-UA 121.',
+    imageUrl: 'https://picsum.photos/id/24/400/300',
+    location: 'Washington Square Park',
+    postedAt: '2 days ago',
+    seller: {
+      id: 'u1',
+      name: 'Sarah Chen',
+      avatar: 'https://picsum.photos/id/64/100/100',
+      email: 'sarah@nyu.edu',
+    },
+  },
+  {
+    id: '6',
+    title: 'Winter Coat (North Face)',
+    price: 120,
+    category: 'Clothing',
+    description: 'Size M. Very warm, perfect for NYC winters.',
+    imageUrl: 'https://picsum.photos/id/80/400/300',
+    location: 'Weinstein Hall',
+    postedAt: '3 days ago',
+    seller: {
+      id: 'u5',
+      name: 'David Smith',
+      avatar: 'https://picsum.photos/id/55/100/100',
+      email: 'david@nyu.edu',
+    },
+  },
+  {
+    id: '7',
+    title: 'Sublet near Washington Square',
+    price: 1800,
+    category: 'Housing',
+    description: '1BR sublet available for summer, furnished.',
+    imageUrl: 'https://picsum.photos/id/81/400/300',
+    location: 'Washington Square Campus',
+    postedAt: '4 days ago',
+    seller: {
+      id: 'u6',
+      name: 'Lily Zhang',
+      avatar: 'https://picsum.photos/id/88/100/100',
+      email: 'lily@nyu.edu',
+    },
+  },
+];
+
+export const NYU_VIOLET = '#57068c';

@@ -1,0 +1,7 @@
+Flask==3.0.2
+Werkzeug==3.0.1
+pymongo>=4.7.0
+mongomock==4.1.2
+python-dotenv>=1.0.0
+pytest==8.1.1
+pytest-cov==4.1.0

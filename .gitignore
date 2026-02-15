@@ -51,6 +51,10 @@ marketplace.db
 # Logs
 *.log
 
+# Frontend
+node_modules/
+dist/
+
 # Backup files
 *~
 *.bak

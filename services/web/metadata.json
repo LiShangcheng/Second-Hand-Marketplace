@@ -1,0 +1,5 @@
+{
+  "name": "NYU Swap Hub",
+  "description": "A modern, responsive secondhand marketplace for the NYU community, featuring item browsing, categorization, seller posting, and user authentication.",
+  "requestFramePermissions": []
+}
