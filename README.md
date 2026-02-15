@@ -10,10 +10,6 @@ The intuition we had for this project came from our own experiences—every seme
 ## 👥 Team
 
 - **Leo Li** - [Leo Li](https://github.com/LiShangcheng)
-- **Leo Qian** - [Leo Qian](https://github.com/Leo-codingMaster)
-- **Hanjun Deng** - [Hanjun Deng](https://github.com/Deng-Hanjun)
-- **Leo Fu** - [Leo Fu](https://github.com/LeoFYH)
-- **Kaiyuan Wu** - [Kaiyuan Wu](https://github.com/qiexian-mf)
 
 ## 📋 Features
 
