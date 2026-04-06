@@ -1,6 +1,52 @@
-import { Category, Item, User } from './types';
+import { Category, Item, User, VerificationResendResult } from './types';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5002';
+const explicitApiBaseUrl = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim();
+
+const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
+
+const getApiBaseCandidates = () => {
+  const candidates: string[] = [];
+
+  const add = (value?: string) => {
+    if (!value) return;
+    const normalized = normalizeBaseUrl(value);
+    if (!normalized || candidates.includes(normalized)) return;
+    candidates.push(normalized);
+  };
+
+  add(explicitApiBaseUrl);
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    if (hostname) {
+      add(`${protocol}//${hostname}:5002`);
+      add(`${protocol}//${hostname}:5001`);
+      add(`${protocol}//${hostname}:5000`);
+    }
+  }
+
+  add('http://localhost:5002');
+  add('http://localhost:5001');
+  add('http://localhost:5000');
+
+  return candidates;
+};
+
+const API_BASE_CANDIDATES = getApiBaseCandidates();
+let activeApiBaseUrl = API_BASE_CANDIDATES[0] || 'http://localhost:5002';
+
+const resolveAgainstActiveApiBase = (value?: string) => {
+  if (!value) return '';
+  if (value.startsWith('/')) return `${activeApiBaseUrl}${value}`;
+  if (!/^https?:\/\//i.test(value)) return `${activeApiBaseUrl}/${value.replace(/^\/+/, '')}`;
+
+  try {
+    const parsed = new URL(value);
+    return `${activeApiBaseUrl}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return value;
+  }
+};
 
 export interface ApiUser {
   id: string;
@@ -8,6 +54,23 @@ export interface ApiUser {
   nickname?: string;
   avatar?: string;
   community_id?: string;
+  email_verified?: boolean;
+  email_verification_status?: 'verified' | 'pending';
+}
+
+export interface AuthResponse {
+  token?: string;
+  user: ApiUser;
+  message?: string;
+  verification_required?: boolean;
+  delivery?: 'sent' | 'preview';
+  verification_preview_url?: string;
+}
+
+interface ApiVerificationResendResponse {
+  message: string;
+  delivery?: 'sent' | 'preview';
+  verification_preview_url?: string;
 }
 
 export interface ApiListing {
@@ -64,8 +127,24 @@ class ApiError extends Error {
   }
 }
 
+const apiFetch = async (path: string, options: RequestInit = {}): Promise<Response> => {
+  let lastNetworkError: unknown = null;
+
+  for (const baseUrl of API_BASE_CANDIDATES) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, options);
+      activeApiBaseUrl = baseUrl;
+      return response;
+    } catch (error) {
+      lastNetworkError = error;
+    }
+  }
+
+  throw lastNetworkError instanceof Error ? lastNetworkError : new TypeError('Failed to fetch');
+};
+
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(path, {
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),
@@ -105,7 +184,7 @@ const DEFAULT_AVATAR = 'https://placehold.co/120x120?text=User';
 export const resolveAssetUrl = (path?: string) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
-  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
+  if (path.startsWith('/')) return `${activeApiBaseUrl}${path}`;
   return path;
 };
 
@@ -235,7 +314,7 @@ export const createListingWithImages = async (payload: {
     formData.append('images', file);
   });
 
-  const response = await fetch(`${API_BASE_URL}/api/listings`, {
+  const response = await apiFetch('/api/listings', {
     method: 'POST',
     body: formData,
   });
@@ -309,7 +388,7 @@ export const updateListingWithImages = async (payload: {
     formData.append('images', file);
   });
 
-  const response = await fetch(`${API_BASE_URL}/api/listings/${payload.listingId}`, {
+  const response = await apiFetch(`/api/listings/${payload.listingId}`, {
     method: 'PUT',
     body: formData,
   });
@@ -334,21 +413,41 @@ export const registerUser = async (payload: {
   password: string;
   nickname: string;
   community_id?: string;
-}): Promise<{ token: string; user: ApiUser }> => {
-  return request<{ token: string; user: ApiUser }>('/api/auth/register', {
+}): Promise<AuthResponse> => {
+  const response = await request<AuthResponse>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  return {
+    ...response,
+    verification_preview_url: resolveAgainstActiveApiBase(response.verification_preview_url),
+  };
 };
 
 export const loginUser = async (payload: {
   email: string;
   password: string;
-}): Promise<{ token: string; user: ApiUser }> => {
-  return request<{ token: string; user: ApiUser }>('/api/auth/login', {
+}): Promise<AuthResponse> => {
+  const response = await request<AuthResponse>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  return {
+    ...response,
+    verification_preview_url: resolveAgainstActiveApiBase(response.verification_preview_url),
+  };
+};
+
+export const resendVerificationEmail = async (email: string): Promise<VerificationResendResult> => {
+  const response = await request<ApiVerificationResendResponse>('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  return {
+    message: response.message,
+    delivery: response.delivery,
+    verificationPreviewUrl: resolveAgainstActiveApiBase(response.verification_preview_url),
+  };
 };
 
 export const fetchUser = async (userId: string): Promise<ApiUser> => {
@@ -380,7 +479,7 @@ export const updateUser = async (payload: {
 export const uploadAvatar = async (payload: { userId: string; file: File }): Promise<ApiUser> => {
   const formData = new FormData();
   formData.append('avatar', payload.file);
-  const response = await fetch(`${API_BASE_URL}/api/users/${payload.userId}/avatar`, {
+  const response = await apiFetch(`/api/users/${payload.userId}/avatar`, {
     method: 'POST',
     body: formData,
   });
@@ -469,7 +568,7 @@ export const uploadMessageImage = async (file: File): Promise<{ url: string }> =
   const formData = new FormData();
   formData.append('image', file);
 
-  const response = await fetch(`${API_BASE_URL}/api/messages/upload`, {
+  const response = await apiFetch('/api/messages/upload', {
     method: 'POST',
     body: formData,
   });
@@ -499,5 +598,7 @@ export const toUser = (apiUser: ApiUser): User => ({
   name: apiUser.nickname || apiUser.email?.split('@')[0] || 'NYU Student',
   avatar: resolveAssetUrl(apiUser.avatar) || DEFAULT_AVATAR,
   email: apiUser.email,
+  emailVerified: apiUser.email_verified !== false,
+  emailVerificationStatus: apiUser.email_verification_status || (apiUser.email_verified === false ? 'pending' : 'verified'),
   joinDate: new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }),
 });

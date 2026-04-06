@@ -148,6 +148,7 @@ class Database:
         self._db.items.create_index("name")
         if hasattr(self._db, "users"):
             self._db.users.create_index("email", unique=True)
+            self._db.users.create_index("email_verification_token_hash")
         if hasattr(self._db, "threads"):
             self._db.threads.create_index("buyer_id")
             self._db.threads.create_index("seller_id")
@@ -238,6 +239,21 @@ class Database:
 
     # ---------- Users ----------
 
+    def _serialize_user(self, doc: Optional[Dict[str, Any]], include_sensitive: bool = False) -> Optional[Dict[str, Any]]:
+        if not doc:
+            return None
+        out = dict(doc)
+        out["id"] = str(out.pop("_id", ""))
+        if not include_sensitive:
+            out.pop("password", None)
+            out.pop("email_verification_token_hash", None)
+            out.pop("email_verification_expires_at", None)
+            out.pop("email_verification_sent_at", None)
+        if "email_verified" not in out:
+            out["email_verified"] = True
+        out["email_verification_status"] = "verified" if out.get("email_verified", True) else "pending"
+        return out
+
     def create_user(
         self,
         email: str,
@@ -245,6 +261,7 @@ class Database:
         nickname: str,
         community_id: Optional[str] = None,
         avatar: Optional[str] = None,
+        **extra: Any,
     ) -> Dict[str, Any]:
         normalized_email = (email or "").lower().strip()
         if self.get_user_by_email(normalized_email):
@@ -256,36 +273,36 @@ class Database:
             "community_id": community_id,
             "avatar": avatar,
         }
+        doc.update(extra)
         try:
             result = self._db.users.insert_one(doc)
         except DuplicateKeyError:
             return {}
-        # Remove sensitive/non-serializable fields before returning
-        doc.pop("password", None)
-        doc.pop("_id", None)
-        doc["id"] = str(result.inserted_id)
-        return doc
+        doc["_id"] = result.inserted_id
+        serialized = self._serialize_user(doc)
+        return serialized or {}
 
-    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+    def get_user_by_email(self, email: str, include_sensitive: bool = False) -> Optional[Dict[str, Any]]:
         normalized = (email or "").lower().strip()
         doc = self._db.users.find_one({"email": normalized})
-        if not doc:
+        return self._serialize_user(doc, include_sensitive=include_sensitive)
+
+    def get_user_by_verification_token_hash(
+        self,
+        token_hash: str,
+        include_sensitive: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not token_hash:
             return None
-        out = dict(doc)
-        out["id"] = str(out.pop("_id", ""))
-        return out
+        doc = self._db.users.find_one({"email_verification_token_hash": token_hash})
+        return self._serialize_user(doc, include_sensitive=include_sensitive)
 
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         try:
             doc = self._db.users.find_one({"_id": ObjectId(user_id)})
         except Exception:
             return None
-        if not doc:
-            return None
-        out = dict(doc)
-        out["id"] = str(out.pop("_id", ""))
-        out.pop("password", None)
-        return out
+        return self._serialize_user(doc)
 
     def update_user(self, user_id: str, updates: Dict[str, Any]) -> bool:
         try:

@@ -19,6 +19,7 @@ The intuition we had for this project came from our own experiences—every seme
 - **Favorites**: Save items to wishlist
 - **User Profiles**: Manage listings and avatars
 - **Campus-Specific**: NYU Brooklyn/Tandon and Washington Square locations
+- **Email Verification**: New accounts must verify an `@nyu.edu` email before they can log in
 
 ## 🏗️ System Architecture
 
@@ -102,12 +103,24 @@ cp .env.example .env
 | MONGO_URI | MongoDB connection string | mongodb://mongo:27017 |
 | MONGO_DB | Database name | marketplace |
 | PORT | API server port | 5001 |
+| CORS_ORIGIN | Allowed frontend origin | http://localhost:3000 |
+| EMAIL_VERIFICATION_BASE_URL | Public API base used in verification links | http://localhost:5002 |
 
 **Optional:**
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | USE_MOCK_DB | Use in-memory DB for testing | 0 |
+| FRONTEND_BASE_URL | App URL shown on the verification success page | http://localhost:3000 |
+| EMAIL_VERIFICATION_TTL_HOURS | Verification link expiration window | 24 |
+| SMTP_HOST | SMTP server hostname for real email delivery | unset |
+| SMTP_PORT | SMTP server port | 587 |
+| SMTP_USERNAME | SMTP username | unset |
+| SMTP_PASSWORD | SMTP password | unset |
+| SMTP_FROM_EMAIL | Sender address for verification emails | unset |
+| SMTP_USE_TLS | Enable STARTTLS for SMTP | 1 |
+
+If SMTP is not configured, the API still creates verification tokens and returns a preview verification link in register/resend responses. That keeps local development and test environments usable while you wire up a real mail provider.
 
 ### Database Seeding
 
@@ -139,6 +152,9 @@ coverage report --fail-under=80
 | `/api/listings` | GET/POST | Browse/create listings |
 | `/api/auth/register` | POST | Register user |
 | `/api/auth/login` | POST | Login user |
+| `/api/auth/resend-verification` | POST | Resend email verification link |
+| `/api/auth/verify-email` | POST | Verify email token with JSON |
+| `/verify-email` | GET | Verify email token from a browser link |
 | `/api/threads` | POST/GET | Create/fetch message threads |
 | `/api/messages` | POST/GET | Send/fetch messages |
 | `/api/favorites` | POST/DELETE/GET | Manage wishlist |

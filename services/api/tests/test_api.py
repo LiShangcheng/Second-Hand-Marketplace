@@ -1,5 +1,6 @@
 import io
 import os
+from urllib.parse import parse_qs, urlparse
 import pytest
 from services.api.app import create_app
 
@@ -246,9 +247,11 @@ def test_register(client):
     )
     assert resp.status_code == 201
     data = resp.get_json()
-    assert "token" in data
     assert "user" in data
     assert data["user"]["email"] == "test@nyu.edu"
+    assert data["user"]["email_verified"] is False
+    assert data["verification_required"] is True
+    assert "verification_preview_url" in data
 
 
 def test_register_validation(client):
@@ -259,7 +262,7 @@ def test_register_validation(client):
 
 
 def test_login(client):
-    client.post(
+    register_resp = client.post(
         "/api/auth/register",
         json={
             "email": "login@nyu.edu",
@@ -267,6 +270,21 @@ def test_login(client):
             "nickname": "LoginUser",
         },
     )
+    register_data = register_resp.get_json()
+    preview_url = register_data["verification_preview_url"]
+    token = parse_qs(urlparse(preview_url).query)["token"][0]
+
+    blocked_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "login@nyu.edu",
+            "password": "password123",
+        },
+    )
+    assert blocked_login.status_code == 403
+
+    verify_resp = client.post("/api/auth/verify-email", json={"token": token})
+    assert verify_resp.status_code == 200
 
     resp = client.post(
         "/api/auth/login",
@@ -279,6 +297,45 @@ def test_login(client):
     data = resp.get_json()
     assert "token" in data
     assert "user" in data
+    assert data["user"]["email_verified"] is True
+
+
+def test_resend_verification(client):
+    register_resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": "resend@nyu.edu",
+            "password": "password123",
+            "nickname": "ResendUser",
+        },
+    )
+    assert register_resp.status_code == 201
+
+    resend_resp = client.post(
+        "/api/auth/resend-verification",
+        json={"email": "resend@nyu.edu"},
+    )
+    assert resend_resp.status_code == 200
+    resend_data = resend_resp.get_json()
+    assert resend_data["message"]
+    assert "verification_preview_url" in resend_data
+
+
+def test_verify_email_page(client):
+    register_resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": "page@nyu.edu",
+            "password": "password123",
+            "nickname": "PageUser",
+        },
+    )
+    preview_url = register_resp.get_json()["verification_preview_url"]
+    parsed = urlparse(preview_url)
+
+    resp = client.get(f"{parsed.path}?{parsed.query}")
+    assert resp.status_code == 200
+    assert b"Email verified" in resp.data
 
 
 def test_login_invalid_credentials(client):

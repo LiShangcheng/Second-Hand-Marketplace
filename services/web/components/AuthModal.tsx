@@ -1,32 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User as UserIcon, ArrowRight } from 'lucide-react';
-import { AuthState } from '../types';
+import { AuthFlowResult, AuthState, VerificationResendResult } from '../types';
 
 interface AuthModalProps {
   auth: AuthState;
   onClose: () => void;
-  onLogin: (payload: { email: string; password: string; name: string }) => Promise<void>;
+  onLogin: (payload: { email: string; password: string; name: string }) => Promise<AuthFlowResult>;
+  onResendVerification: (email: string) => Promise<VerificationResendResult>;
   onChangeMode: (mode: 'login' | 'register') => void;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeMode }) => {
-  if (!auth.isOpen) return null;
-
+const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onResendVerification, onChangeMode }) => {
   const isLogin = auth.mode === 'login';
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    message: string;
+    email: string;
+    delivery?: 'sent' | 'preview';
+    previewUrl?: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     setError(null);
   }, [auth.mode]);
 
+  useEffect(() => {
+    if (auth.isOpen) return;
+    setName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setNotice(null);
+    setSubmitting(false);
+    setResending(false);
+  }, [auth.isOpen]);
+
+  const resetPasswords = () => {
+    setPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleResend = async () => {
+    const targetEmail = notice?.email || email.trim();
+    if (!targetEmail) return;
+    setError(null);
+    setResending(true);
+    try {
+      const result = await onResendVerification(targetEmail);
+      setNotice({
+        message: result.message,
+        email: targetEmail,
+        delivery: result.delivery,
+        previewUrl: result.verificationPreviewUrl,
+      });
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resend verification email.');
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setSubmitting(true);
     try {
       if (!isLogin && password !== confirmPassword) {
@@ -36,22 +80,44 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
       }
       const fallbackName = email.includes('@') ? email.split('@')[0] : 'NYU Student';
       const displayName = name.trim() || fallbackName;
-      await onLogin({
+      const result = await onLogin({
         email: email.trim(),
         password,
         name: displayName,
       });
-      onClose();
-      setName('');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      if (result.completed) {
+        onClose();
+        setName('');
+        setEmail('');
+        resetPasswords();
+        return;
+      }
+      const pendingEmail = result.pendingEmail || email.trim();
+      setNotice({
+        message: result.message || 'Please verify your NYU email before logging in.',
+        email: pendingEmail,
+        delivery: result.delivery,
+        previewUrl: result.verificationPreviewUrl,
+      });
+      resetPasswords();
+      if (!isLogin) {
+        onChangeMode('login');
+      }
     } catch (err: any) {
-      setError(err?.message || 'Login failed.');
+      const message = err?.message || 'Login failed.';
+      setError(message);
+      if (email.trim() && message.toLowerCase().includes('verify')) {
+        setNotice({
+          message,
+          email: email.trim(),
+        });
+      }
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (!auth.isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
@@ -163,6 +229,37 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
                 {error && (
                     <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                         {error}
+                    </div>
+                )}
+
+                {notice && (
+                    <div className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-3 space-y-3">
+                        <p>{notice.message}</p>
+                        <p className="text-xs text-emerald-700">
+                            {notice.delivery === 'preview'
+                                ? 'SMTP is not configured yet, so a preview verification link is available below.'
+                                : `Verification email target: ${notice.email}`}
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                type="button"
+                                onClick={handleResend}
+                                disabled={resending}
+                                className="text-sm font-semibold text-[#57068c] hover:underline disabled:text-gray-400 disabled:no-underline"
+                            >
+                                {resending ? 'Sending...' : 'Resend verification email'}
+                            </button>
+                            {notice.previewUrl && (
+                                <a
+                                    href={notice.previewUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm font-semibold text-[#57068c] hover:underline"
+                                >
+                                    Open verification link
+                                </a>
+                            )}
+                        </div>
                     </div>
                 )}
 

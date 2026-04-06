@@ -8,7 +8,7 @@ import AuthModal from './components/AuthModal';
 import ItemDetail from './components/ItemDetail';
 import Profile from './components/Profile';
 import Messages from './components/Messages';
-import { Category, Item, AuthState, ViewState, User } from './types';
+import { Category, Item, AuthState, AuthFlowResult, ViewState, User } from './types';
 import { CAMPUS_LOCATIONS } from './constants';
 import {
   fetchListings,
@@ -32,6 +32,7 @@ import {
   updateUser,
   uploadAvatar,
   fetchUser,
+  resendVerificationEmail,
   toUser,
   ApiThread,
   clearPresence,
@@ -154,6 +155,11 @@ const App: React.FC = () => {
         const parsed = JSON.parse(raw) as User;
         if (!parsed?.id) return;
         const fresh = await fetchUser(parsed.id);
+        if (fresh.email_verified === false) {
+          localStorage.removeItem(USER_STORAGE_KEY);
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          return;
+        }
         setCurrentUser(toUser(fresh));
       } catch {
         localStorage.removeItem(USER_STORAGE_KEY);
@@ -338,6 +344,10 @@ const App: React.FC = () => {
                                       ...prev,
                                       name: updated.nickname || prev.name,
                                       email: updated.email || prev.email,
+                                      emailVerified: updated.email_verified !== false,
+                                      emailVerificationStatus:
+                                          updated.email_verification_status ||
+                                          (updated.email_verified === false ? 'pending' : 'verified'),
                                   }
                                 : prev
                         );
@@ -564,10 +574,24 @@ const App: React.FC = () => {
             const response = isRegister
               ? await registerUser({ email, password, nickname: name })
               : await loginUser({ email, password });
+            if (isRegister || response.verification_required) {
+              return {
+                completed: false,
+                message: response.message || 'Account created. Verify your NYU email before logging in.',
+                pendingEmail: email,
+                delivery: response.delivery,
+                verificationPreviewUrl: response.verification_preview_url,
+              } satisfies AuthFlowResult;
+            }
+            if (!response.token) {
+              throw new Error('Login response missing token.');
+            }
             localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
             setCurrentUser(toUser(response.user));
             setAuth(prev => ({ ...prev, isOpen: false }));
+            return { completed: true } satisfies AuthFlowResult;
         }}
+        onResendVerification={async (email) => resendVerificationEmail(email)}
         onChangeMode={(mode) => setAuth(prev => ({ ...prev, mode }))}
       />
     </div>

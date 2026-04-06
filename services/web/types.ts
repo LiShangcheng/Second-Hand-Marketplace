@@ -3,6 +3,8 @@ export interface User {
   name: string;
   avatar: string;
   email: string;
+  emailVerified?: boolean;
+  emailVerificationStatus?: 'verified' | 'pending';
   joinDate?: string;
 }
 
@@ -27,6 +29,20 @@ export type Category = 'All' | 'Textbooks' | 'Furniture' | 'Electronics' | 'Dorm
 export interface AuthState {
   isOpen: boolean;
   mode: 'login' | 'register';
+}
+
+export interface AuthFlowResult {
+  completed: boolean;
+  message?: string;
+  pendingEmail?: string;
+  delivery?: 'sent' | 'preview';
+  verificationPreviewUrl?: string;
+}
+
+export interface VerificationResendResult {
+  message: string;
+  delivery?: 'sent' | 'preview';
+  verificationPreviewUrl?: string;
 }
 
 export type ViewState = 'home' | 'item-detail' | 'profile' | 'messages';

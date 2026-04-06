@@ -1,9 +1,14 @@
 import os
+import hashlib
+import secrets
+import smtplib
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import quote
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, render_template_string, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -66,6 +71,24 @@ def create_app(testing: bool = False):
         db.seed_if_empty()
 
     cors_origin = os.getenv("CORS_ORIGIN", "http://localhost:3000")
+    verification_base_url = os.getenv("EMAIL_VERIFICATION_BASE_URL", "").strip()
+    frontend_base_url = os.getenv("FRONTEND_BASE_URL", "").strip()
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_username = os.getenv("SMTP_USERNAME", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    smtp_from_email = os.getenv("SMTP_FROM_EMAIL", "").strip()
+
+    try:
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    except ValueError:
+        smtp_port = 587
+
+    try:
+        verification_ttl_hours = max(1, int(os.getenv("EMAIL_VERIFICATION_TTL_HOURS", "24")))
+    except ValueError:
+        verification_ttl_hours = 24
+
+    smtp_use_tls = os.getenv("SMTP_USE_TLS", "1").lower() not in {"0", "false", "no"}
 
     @app.before_request
     def handle_preflight():
@@ -98,6 +121,126 @@ def create_app(testing: bool = False):
         if value in (None, "", "None", "null", "undefined"):
             return None
         return value
+
+    def _is_email_verified(user_doc):
+        if not user_doc:
+            return False
+        return bool(user_doc.get("email_verified", True))
+
+    def _parse_iso_datetime(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def _build_verification_url(token: str):
+        base = (verification_base_url or request.host_url.rstrip("/")).rstrip("/")
+        return f"{base}/verify-email?token={quote(token)}"
+
+    def _build_open_app_url():
+        return frontend_base_url.rstrip("/")
+
+    def _new_verification_bundle():
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        return {
+            "token": token,
+            "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "expires_at": (now + timedelta(hours=verification_ttl_hours)).isoformat(),
+            "sent_at": now.isoformat(),
+        }
+
+    def _send_verification_email(email: str, nickname: str, verification_url: str):
+        if not smtp_host or not smtp_from_email:
+            app.logger.warning("SMTP not configured; verification link for %s: %s", email, verification_url)
+            return {"delivery": "preview", "verification_preview_url": verification_url}
+
+        msg = EmailMessage()
+        msg["Subject"] = "Verify your NYU Swap account"
+        msg["From"] = smtp_from_email
+        msg["To"] = email
+        msg.set_content(
+            "\n".join(
+                [
+                    f"Hi {nickname or 'there'},",
+                    "",
+                    "Welcome to NYU Swap.",
+                    "Please verify your NYU email before logging in:",
+                    verification_url,
+                    "",
+                    f"This link expires in {verification_ttl_hours} hours.",
+                ]
+            )
+        )
+
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                if smtp_use_tls:
+                    server.starttls()
+                if smtp_username:
+                    server.login(smtp_username, smtp_password)
+                server.send_message(msg)
+        except Exception:
+            app.logger.exception("Failed to send verification email to %s", email)
+            return {"delivery": "preview", "verification_preview_url": verification_url}
+
+        return {"delivery": "sent"}
+
+    def _issue_verification(user_id: str, email: str, nickname: str):
+        bundle = _new_verification_bundle()
+        db.update_user(
+            user_id,
+            {
+                "email_verified": False,
+                "email_verified_at": None,
+                "email_verification_token_hash": bundle["token_hash"],
+                "email_verification_expires_at": bundle["expires_at"],
+                "email_verification_sent_at": bundle["sent_at"],
+            },
+        )
+        verification_url = _build_verification_url(bundle["token"])
+        delivery_payload = _send_verification_email(email, nickname, verification_url)
+        delivery_payload["verification_url"] = verification_url
+        return delivery_payload
+
+    def _verification_response_payload(message: str, delivery_payload: dict):
+        payload = {
+            "message": message,
+            "delivery": delivery_payload.get("delivery", "preview"),
+        }
+        if delivery_payload.get("delivery") == "preview" or testing:
+            payload["verification_preview_url"] = delivery_payload.get("verification_url")
+        return payload
+
+    def _verify_email_token(token: str):
+        raw_token = (token or "").strip()
+        if not raw_token:
+            return None, {"error": "verification token required"}, 400
+
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        user_doc = db.get_user_by_verification_token_hash(token_hash, include_sensitive=True)
+        if not user_doc:
+            return None, {"error": "This verification link is invalid or has already been used."}, 400
+
+        expires_at = _parse_iso_datetime(user_doc.get("email_verification_expires_at"))
+        now = datetime.now(timezone.utc)
+        if not expires_at or expires_at < now:
+            return None, {"error": "This verification link has expired. Request a new verification email."}, 400
+
+        db.update_user(
+            user_doc["id"],
+            {
+                "email_verified": True,
+                "email_verified_at": now.isoformat(),
+                "email_verification_token_hash": None,
+                "email_verification_expires_at": None,
+                "email_verification_sent_at": None,
+            },
+        )
+        fresh_user = db.get_user(user_doc["id"])
+        return fresh_user, {"message": "Your NYU email has been verified. You can log in now."}, 200
 
     def _presence_payload(user_id: str):
         last_seen = presence_store.get(user_id)
@@ -342,26 +485,147 @@ def create_app(testing: bool = False):
             password=password,
             nickname=nickname,
             community_id=community_id,
+            email_verified=False,
+            email_verified_at=None,
         )
         if not created:
             return jsonify({"error": "email already registered"}), 400
-        token = f"token-{created['id']}"
-        auth_tokens[token] = created["id"]
-        return jsonify({"token": token, "user": created}), 201
+
+        delivery_payload = _issue_verification(created["id"], created["email"], created.get("nickname") or "User")
+        fresh_user = db.get_user(created["id"]) or created
+        response_payload = {
+            "user": fresh_user,
+            "verification_required": True,
+            **_verification_response_payload(
+                "Account created. Please verify your NYU email before logging in.",
+                delivery_payload,
+            ),
+        }
+        return jsonify(response_payload), 201
 
     @app.route("/api/auth/login", methods=["POST"])
     def login():
         payload = request.get_json(force=True, silent=True) or {}
         email = (payload.get("email") or "").lower().strip()
         password = payload.get("password") or ""
-        user_doc = db.get_user_by_email(email)
+        user_doc = db.get_user_by_email(email, include_sensitive=True)
         if user_doc and user_doc.get("password") == password:
-            # Remove password before returning
-            safe_user = {k: v for k, v in user_doc.items() if k != "password"}
+            if not _is_email_verified(user_doc):
+                return (
+                    jsonify(
+                        {
+                            "error": "Please verify your NYU email before logging in.",
+                            "verification_required": True,
+                        }
+                    ),
+                    403,
+                )
+            safe_user = db.get_user(user_doc["id"]) or {k: v for k, v in user_doc.items() if k != "password"}
             token = f"token-{safe_user['id']}"
             auth_tokens[token] = safe_user["id"]
             return jsonify({"token": token, "user": safe_user}), 200
         return jsonify({"error": "Invalid credentials"}), 401
+
+    @app.route("/api/auth/resend-verification", methods=["POST"])
+    def resend_verification():
+        payload = request.get_json(force=True, silent=True) or {}
+        email = (payload.get("email") or "").lower().strip()
+        if not email:
+            return jsonify({"error": "email required"}), 400
+
+        user_doc = db.get_user_by_email(email, include_sensitive=True)
+        if not user_doc:
+            return jsonify({"message": "If an account exists for that email, a verification email has been sent."}), 200
+        if _is_email_verified(user_doc):
+            return jsonify({"error": "This email is already verified."}), 400
+
+        delivery_payload = _issue_verification(user_doc["id"], user_doc["email"], user_doc.get("nickname") or "User")
+        response_payload = _verification_response_payload(
+            "A new verification email has been sent.",
+            delivery_payload,
+        )
+        return jsonify(response_payload), 200
+
+    @app.route("/api/auth/verify-email", methods=["POST"])
+    def verify_email_api():
+        payload = request.get_json(force=True, silent=True) or {}
+        user, response_payload, status_code = _verify_email_token(payload.get("token") or "")
+        if not user:
+            return jsonify(response_payload), status_code
+        response_payload["user"] = user
+        return jsonify(response_payload), status_code
+
+    @app.route("/verify-email", methods=["GET"])
+    def verify_email_page():
+        user, response_payload, status_code = _verify_email_token(request.args.get("token") or "")
+        success = bool(user)
+        open_app_url = _build_open_app_url()
+        title = "Email verified" if success else "Verification failed"
+        body = response_payload.get("message") if success else response_payload.get("error")
+        return (
+            render_template_string(
+                """
+                <!doctype html>
+                <html lang="en">
+                  <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>{{ title }}</title>
+                    <style>
+                      body {
+                        margin: 0;
+                        min-height: 100vh;
+                        display: grid;
+                        place-items: center;
+                        background: #f4f1fb;
+                        color: #1f2937;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                      }
+                      .card {
+                        width: min(92vw, 520px);
+                        background: white;
+                        border-radius: 24px;
+                        padding: 32px;
+                        box-shadow: 0 20px 45px rgba(87, 6, 140, 0.12);
+                      }
+                      h1 {
+                        margin: 0 0 12px;
+                        color: {{ "#166534" if success else "#991b1b" }};
+                      }
+                      p {
+                        margin: 0;
+                        line-height: 1.6;
+                      }
+                      a {
+                        display: inline-block;
+                        margin-top: 20px;
+                        color: white;
+                        background: #57068c;
+                        padding: 12px 18px;
+                        border-radius: 999px;
+                        text-decoration: none;
+                        font-weight: 600;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    <main class="card">
+                      <h1>{{ title }}</h1>
+                      <p>{{ body }}</p>
+                      {% if open_app_url %}
+                      <a href="{{ open_app_url }}">Open NYU Swap</a>
+                      {% endif %}
+                    </main>
+                  </body>
+                </html>
+                """,
+                title=title,
+                body=body,
+                open_app_url=open_app_url,
+                success=success,
+            ),
+            status_code,
+        )
 
     @app.route("/api/users/<user_id>", methods=["GET", "PUT"])
     def get_user(user_id):
