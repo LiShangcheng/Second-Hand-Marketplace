@@ -245,6 +245,7 @@ class Database:
         nickname: str,
         community_id: Optional[str] = None,
         avatar: Optional[str] = None,
+        email_verified: bool = False,
     ) -> Dict[str, Any]:
         normalized_email = (email or "").lower().strip()
         if self.get_user_by_email(normalized_email):
@@ -255,6 +256,7 @@ class Database:
             "nickname": nickname,
             "community_id": community_id,
             "avatar": avatar,
+            "email_verified": email_verified,
         }
         try:
             result = self._db.users.insert_one(doc)
@@ -285,6 +287,10 @@ class Database:
         out = dict(doc)
         out["id"] = str(out.pop("_id", ""))
         out.pop("password", None)
+        out.pop("verification_code_hash", None)
+        out.pop("verification_expires_at", None)
+        out.pop("verification_sent_at", None)
+        out.pop("verification_attempts", None)
         return out
 
     def update_user(self, user_id: str, updates: Dict[str, Any]) -> bool:

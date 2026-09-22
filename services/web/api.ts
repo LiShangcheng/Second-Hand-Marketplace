@@ -8,6 +8,7 @@ export interface ApiUser {
   nickname?: string;
   avatar?: string;
   community_id?: string;
+  email_verified?: boolean;
 }
 
 export interface ApiListing {
@@ -334,10 +335,32 @@ export const registerUser = async (payload: {
   password: string;
   nickname: string;
   community_id?: string;
-}): Promise<{ token: string; user: ApiUser }> => {
-  return request<{ token: string; user: ApiUser }>('/api/auth/register', {
+}): Promise<{
+  message: string;
+  verification_required: true;
+  email: string;
+  user: ApiUser;
+}> => {
+  return request('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+};
+
+export const verifyEmail = async (payload: {
+  email: string;
+  code: string;
+}): Promise<{ token: string; user: ApiUser }> => {
+  return request<{ token: string; user: ApiUser }>('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
+export const resendVerification = async (email: string): Promise<{ message: string }> => {
+  return request<{ message: string }>('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   });
 };
 
