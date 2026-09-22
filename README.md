@@ -18,6 +18,7 @@ The intuition we had for this project came from our own experiences—every seme
 - **Messaging**: Real-time chat between buyers and sellers
 - **Favorites**: Save items to wishlist
 - **User Profiles**: Manage listings and avatars
+- **NYU Email Verification**: Require a one-time code before a new account can sign in
 - **Campus-Specific**: NYU Brooklyn/Tandon and Washington Square locations
 
 ## 🏗️ System Architecture
@@ -109,6 +110,23 @@ cp .env.example .env
 |----------|-------------|---------|
 | USE_MOCK_DB | Use in-memory DB for testing | 0 |
 
+### Email verification
+
+Local development defaults to `MAIL_MODE=console`. Verification codes are printed in the API logs:
+
+```bash
+docker compose logs -f api
+```
+
+To send real email, set `MAIL_MODE=smtp` and configure `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM` in `.env`. Copy `.env.example`
+for the complete list of options. Verification codes expire after 10 minutes, allow
+five attempts, and have a 60-second resend cooldown by default.
+
+Registration returns `verification_required` instead of a login token. Complete the
+flow with `POST /api/auth/verify-email`; use `POST /api/auth/resend-verification` to
+request a replacement code.
+
 ### Database Seeding
 
 MongoDB automatically seeds initial data on startup via `services/mongo/initdb/init.js`:
@@ -138,6 +156,8 @@ coverage report --fail-under=80
 | `/api/health` | GET | Health check |
 | `/api/listings` | GET/POST | Browse/create listings |
 | `/api/auth/register` | POST | Register user |
+| `/api/auth/verify-email` | POST | Verify a six-digit email code |
+| `/api/auth/resend-verification` | POST | Request a new verification code |
 | `/api/auth/login` | POST | Login user |
 | `/api/threads` | POST/GET | Create/fetch message threads |
 | `/api/messages` | POST/GET | Send/fetch messages |

@@ -1,17 +1,29 @@
 import io
 import os
+from datetime import datetime, timedelta, timezone
 import pytest
-from services.api.app import create_app
+from services.api import app as app_module
+
+
+create_app = app_module.create_app
 
 
 @pytest.fixture()
-def client():
+def client(tmp_path, monkeypatch):
     os.environ["USE_MOCK_DB"] = "1"
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", tmp_path)
     app = create_app(testing=True)
     app.config.update({"TESTING": True})
     with app.test_client() as client:
         yield client
     os.environ.pop("USE_MOCK_DB", None)
+
+
+def latest_verification_code(client, email=None):
+    outbox = client.application.extensions["email_sender"].outbox
+    messages = [message for message in outbox if email is None or message["to"] == email]
+    assert messages, "Expected a verification email"
+    return messages[-1]["code"]
 
 
 def test_health(client):
@@ -246,9 +258,12 @@ def test_register(client):
     )
     assert resp.status_code == 201
     data = resp.get_json()
-    assert "token" in data
+    assert "token" not in data
     assert "user" in data
+    assert data["verification_required"] is True
     assert data["user"]["email"] == "test@nyu.edu"
+    assert data["user"]["email_verified"] is False
+    assert len(latest_verification_code(client, "test@nyu.edu")) == 6
 
 
 def test_register_validation(client):
@@ -256,6 +271,125 @@ def test_register_validation(client):
     assert resp.status_code == 400
     resp = client.post("/api/auth/register", json={"password": "password123"})
     assert resp.status_code == 400
+    resp = client.post(
+        "/api/auth/register",
+        json={"email": "test@gmail.com", "password": "password123"},
+    )
+    assert resp.status_code == 400
+    resp = client.post(
+        "/api/auth/register",
+        json={"email": "foo@bar@nyu.edu", "password": "password123"},
+    )
+    assert resp.status_code == 400
+
+
+def test_verify_email(client):
+    email = "verify@nyu.edu"
+    client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
+    )
+    code = latest_verification_code(client, email)
+
+    resp = client.post("/api/auth/verify-email", json={"email": email, "code": code})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "token" in data
+    assert data["user"]["email_verified"] is True
+    assert "verification_code_hash" not in data["user"]
+
+    repeat_resp = client.post(
+        "/api/auth/verify-email",
+        json={"email": email, "code": "000000"},
+    )
+    assert repeat_resp.status_code == 400
+    assert "token" not in repeat_resp.get_json()
+
+
+def test_verify_email_rejects_invalid_and_expired_codes(client):
+    email = "invalid-code@nyu.edu"
+    register_resp = client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
+    )
+    user_id = register_resp.get_json()["user"]["id"]
+
+    resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
+    assert resp.status_code == 400
+
+    database = client.application.extensions["database"]
+    database.update_user(
+        user_id,
+        {"verification_expires_at": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()},
+    )
+    resp = client.post(
+        "/api/auth/verify-email",
+        json={"email": email, "code": latest_verification_code(client, email)},
+    )
+    assert resp.status_code == 400
+
+
+def test_verify_email_limits_attempts(client):
+    email = "attempts@nyu.edu"
+    client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
+    )
+    for _ in range(4):
+        resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
+        assert resp.status_code == 400
+    resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
+    assert resp.status_code == 429
+
+
+def test_resend_verification_rate_limit(client):
+    email = "resend@nyu.edu"
+    client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
+    )
+    resp = client.post("/api/auth/resend-verification", json={"email": email})
+    assert resp.status_code == 429
+    assert "Retry-After" in resp.headers
+
+    client.application.config["VERIFICATION_RESEND_SECONDS"] = 0
+    resp = client.post("/api/auth/resend-verification", json={"email": email})
+    assert resp.status_code == 200
+    assert len(client.application.extensions["email_sender"].outbox) == 2
+
+
+def test_unverified_user_cannot_login(client):
+    email = "pending@nyu.edu"
+    client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "PendingUser"},
+    )
+    resp = client.post("/api/auth/login", json={"email": email, "password": "password123"})
+    assert resp.status_code == 403
+    assert resp.get_json()["verification_required"] is True
+
+
+def test_registration_email_failure_can_be_retried():
+    class FailingSender:
+        outbox = []
+
+        def send_verification_code(self, *_args):
+            raise RuntimeError("mail unavailable")
+
+    app = create_app(testing=True, email_sender=FailingSender())
+    app.config.update({"TESTING": True})
+    client = app.test_client()
+    email = "mail-failure@nyu.edu"
+
+    resp = client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "nickname": "MailFailure"},
+    )
+    assert resp.status_code == 503
+
+    user = app.extensions["database"].get_user_by_email(email)
+    assert user["verification_sent_at"] is None
+    assert user["verification_code_hash"] is None
 
 
 def test_login(client):
@@ -267,6 +401,12 @@ def test_login(client):
             "nickname": "LoginUser",
         },
     )
+    code = latest_verification_code(client, "login@nyu.edu")
+    verify_resp = client.post(
+        "/api/auth/verify-email",
+        json={"email": "login@nyu.edu", "code": code},
+    )
+    assert verify_resp.status_code == 200
 
     resp = client.post(
         "/api/auth/login",
@@ -324,6 +464,36 @@ def test_update_user(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["nickname"] == "NewName"
+
+
+def test_update_user_email_requires_reverification(client):
+    original_email = "change-email@nyu.edu"
+    new_email = "changed-email@nyu.edu"
+    register_resp = client.post(
+        "/api/auth/register",
+        json={
+            "email": original_email,
+            "password": "password123",
+            "nickname": "EmailUser",
+        },
+    )
+    user_id = register_resp.get_json()["user"]["id"]
+    client.post(
+        "/api/auth/verify-email",
+        json={"email": original_email, "code": latest_verification_code(client, original_email)},
+    )
+
+    resp = client.put(f"/api/users/{user_id}", json={"email": new_email})
+    assert resp.status_code == 200
+    assert resp.get_json()["email"] == new_email
+    assert resp.get_json()["email_verified"] is False
+
+    verify_resp = client.post(
+        "/api/auth/verify-email",
+        json={"email": new_email, "code": latest_verification_code(client, new_email)},
+    )
+    assert verify_resp.status_code == 200
+    assert verify_resp.get_json()["user"]["email_verified"] is True
 
 
 def test_update_user_validation(client):

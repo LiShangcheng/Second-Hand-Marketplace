@@ -1,6 +1,10 @@
 import os
+import hashlib
+import hmac
+import re
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -12,8 +16,10 @@ load_dotenv()
 
 try:
     from .db import Database
+    from .email_service import EmailSender
 except ImportError:  # pragma: no cover
     from db import Database  # type: ignore
+    from email_service import EmailSender  # type: ignore
 
 
 def _find_root() -> Path:
@@ -57,11 +63,18 @@ WSQ_KEYWORDS = {
 }
 
 
-def create_app(testing: bool = False):
+def create_app(testing: bool = False, email_sender: EmailSender | None = None):
     app = Flask(__name__, static_folder=str(STATIC_DIR), template_folder=str(TEMPLATES_DIR))
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
     db = Database(MONGO_URI, MONGO_DB, use_mock=testing)
+    mailer = email_sender or EmailSender("memory" if testing else None)
+    app.extensions["database"] = db
+    app.extensions["email_sender"] = mailer
+    app.config.setdefault("VERIFICATION_TTL_MINUTES", int(os.getenv("VERIFICATION_TTL_MINUTES", "10")))
+    app.config.setdefault("VERIFICATION_RESEND_SECONDS", int(os.getenv("VERIFICATION_RESEND_SECONDS", "60")))
+    app.config.setdefault("VERIFICATION_MAX_ATTEMPTS", int(os.getenv("VERIFICATION_MAX_ATTEMPTS", "5")))
+    app.config.setdefault("VERIFICATION_SECRET", os.getenv("VERIFICATION_SECRET", "local-development-secret"))
     if not testing:
         db.seed_if_empty()
 
@@ -119,6 +132,71 @@ def create_app(testing: bool = False):
         if any(key in lower for key in WSQ_KEYWORDS):
             return "2"
         return None
+
+    def _normalize_nyu_email(raw_email):
+        email = (raw_email or "").lower().strip()
+        if not re.fullmatch(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@nyu\.edu", email):
+            return None
+        return email
+
+    def _verification_hash(code: str) -> str:
+        secret = app.config["VERIFICATION_SECRET"].encode("utf-8")
+        return hmac.new(secret, code.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    def _parse_utc(value):
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            return None
+
+    def _issue_verification_code(user, enforce_cooldown: bool = True):
+        now = datetime.now(timezone.utc)
+        sent_at = _parse_utc(user.get("verification_sent_at"))
+        cooldown = app.config["VERIFICATION_RESEND_SECONDS"]
+        if enforce_cooldown and sent_at:
+            seconds_remaining = cooldown - int((now - sent_at).total_seconds())
+            if seconds_remaining > 0:
+                return None, seconds_remaining
+
+        code = f"{secrets.randbelow(900000) + 100000:06d}"
+        expires_at = now + timedelta(minutes=app.config["VERIFICATION_TTL_MINUTES"])
+        db.update_user(
+            user["id"],
+            {
+                "verification_code_hash": _verification_hash(code),
+                "verification_expires_at": expires_at.isoformat(),
+                "verification_sent_at": now.isoformat(),
+                "verification_attempts": 0,
+            },
+        )
+        try:
+            mailer.send_verification_code(
+                user["email"], code, app.config["VERIFICATION_TTL_MINUTES"]
+            )
+        except Exception:
+            app.logger.exception("Failed to send verification email")
+            db.update_user(
+                user["id"],
+                {
+                    "verification_code_hash": None,
+                    "verification_expires_at": None,
+                    "verification_sent_at": None,
+                    "verification_attempts": 0,
+                },
+            )
+            return False, 0
+        return True, 0
+
+    def _auth_payload(user):
+        safe_user = db.get_user(user["id"])
+        token = f"token-{user['id']}"
+        auth_tokens[token] = user["id"]
+        return {"token": token, "user": safe_user}
 
     @app.route("/api/health")
     @app.route("/health")
@@ -327,27 +405,101 @@ def create_app(testing: bool = False):
     @app.route("/api/auth/register", methods=["POST"])
     def register():
         payload = request.get_json(force=True, silent=True) or {}
-        email = (payload.get("email") or "").lower().strip()
+        email = _normalize_nyu_email(payload.get("email"))
         password = payload.get("password") or ""
         nickname = payload.get("nickname") or "User"
         community_id = payload.get("community_id")
-        if not email or not password:
+        if not payload.get("email") or not password:
             return jsonify({"error": "email and password required"}), 400
-
-        if not email.endswith("@nyu.edu"):
-            return jsonify({"error": "email must end with nyu.edu"}), 400
+        if not email:
+            return jsonify({"error": "a valid @nyu.edu email is required"}), 400
 
         created = db.create_user(
             email=email,
             password=password,
             nickname=nickname,
             community_id=community_id,
+            email_verified=False,
         )
         if not created:
             return jsonify({"error": "email already registered"}), 400
-        token = f"token-{created['id']}"
-        auth_tokens[token] = created["id"]
-        return jsonify({"token": token, "user": created}), 201
+        created_private = db.get_user_by_email(email)
+        sent, _ = _issue_verification_code(created_private, enforce_cooldown=False)
+        if sent is False:
+            return jsonify({"error": "account created, but verification email could not be sent"}), 503
+        return jsonify(
+            {
+                "message": "Verification code sent",
+                "verification_required": True,
+                "email": email,
+                "user": created,
+            }
+        ), 201
+
+    @app.route("/api/auth/verify-email", methods=["POST"])
+    def verify_email():
+        payload = request.get_json(force=True, silent=True) or {}
+        email = _normalize_nyu_email(payload.get("email"))
+        code = str(payload.get("code") or "").strip()
+        if not email or not re.fullmatch(r"\d{6}", code):
+            return jsonify({"error": "valid email and 6-digit code are required"}), 400
+
+        user = db.get_user_by_email(email)
+        if not user:
+            return jsonify({"error": "invalid or expired verification code"}), 400
+        if user.get("email_verified") is True:
+            return jsonify({"error": "Email is already verified; please log in"}), 400
+
+        max_attempts = app.config["VERIFICATION_MAX_ATTEMPTS"]
+        attempts = int(user.get("verification_attempts") or 0)
+        if attempts >= max_attempts:
+            return jsonify({"error": "too many attempts; request a new code"}), 429
+
+        expires_at = _parse_utc(user.get("verification_expires_at"))
+        expected_hash = user.get("verification_code_hash") or ""
+        if not expires_at or expires_at <= datetime.now(timezone.utc) or not expected_hash:
+            return jsonify({"error": "invalid or expired verification code"}), 400
+
+        if not hmac.compare_digest(expected_hash, _verification_hash(code)):
+            attempts += 1
+            db.update_user(user["id"], {"verification_attempts": attempts})
+            if attempts >= max_attempts:
+                return jsonify({"error": "too many attempts; request a new code"}), 429
+            return jsonify({"error": "invalid or expired verification code"}), 400
+
+        db.update_user(
+            user["id"],
+            {
+                "email_verified": True,
+                "verification_code_hash": None,
+                "verification_expires_at": None,
+                "verification_sent_at": None,
+                "verification_attempts": 0,
+            },
+        )
+        verified_user = db.get_user_by_email(email)
+        return jsonify(_auth_payload(verified_user)), 200
+
+    @app.route("/api/auth/resend-verification", methods=["POST"])
+    def resend_verification():
+        payload = request.get_json(force=True, silent=True) or {}
+        email = _normalize_nyu_email(payload.get("email"))
+        if not email:
+            return jsonify({"error": "a valid @nyu.edu email is required"}), 400
+        user = db.get_user_by_email(email)
+        if not user:
+            return jsonify({"message": "If the account exists, a verification code was sent"}), 200
+        if user.get("email_verified") is True:
+            return jsonify({"message": "Email is already verified"}), 200
+
+        sent, retry_after = _issue_verification_code(user)
+        if sent is None:
+            response = jsonify({"error": "please wait before requesting another code"})
+            response.headers["Retry-After"] = str(retry_after)
+            return response, 429
+        if sent is False:
+            return jsonify({"error": "verification email could not be sent"}), 503
+        return jsonify({"message": "Verification code sent"}), 200
 
     @app.route("/api/auth/login", methods=["POST"])
     def login():
@@ -356,11 +508,15 @@ def create_app(testing: bool = False):
         password = payload.get("password") or ""
         user_doc = db.get_user_by_email(email)
         if user_doc and user_doc.get("password") == password:
-            # Remove password before returning
-            safe_user = {k: v for k, v in user_doc.items() if k != "password"}
-            token = f"token-{safe_user['id']}"
-            auth_tokens[token] = safe_user["id"]
-            return jsonify({"token": token, "user": safe_user}), 200
+            if user_doc.get("email_verified") is not True:
+                return jsonify(
+                    {
+                        "error": "Email verification required",
+                        "verification_required": True,
+                        "email": email,
+                    }
+                ), 403
+            return jsonify(_auth_payload(user_doc)), 200
         return jsonify({"error": "Invalid credentials"}), 401
 
     @app.route("/api/users/<user_id>", methods=["GET", "PUT"])
@@ -368,20 +524,23 @@ def create_app(testing: bool = False):
         if request.method == "PUT":
             payload = request.get_json(force=True, silent=True) or {}
             updates = {}
+            email_changed = False
             if "nickname" in payload:
                 updates["nickname"] = payload.get("nickname")
             if "community_id" in payload:
                 updates["community_id"] = payload.get("community_id")
             if "email" in payload:
-                email = (payload.get("email") or "").lower().strip()
+                email = _normalize_nyu_email(payload.get("email"))
                 if not email:
-                    return jsonify({"error": "email required"}), 400
-                if not email.endswith("@nyu.edu"):
-                    return jsonify({"error": "email must end with nyu.edu"}), 400
+                    return jsonify({"error": "a valid @nyu.edu email is required"}), 400
                 existing = db.get_user_by_email(email)
                 if existing and str(existing.get("id")) != str(user_id):
                     return jsonify({"error": "email already registered"}), 400
                 updates["email"] = email
+                current_user = db.get_user(user_id)
+                email_changed = bool(current_user and current_user.get("email") != email)
+                if email_changed:
+                    updates["email_verified"] = False
             if "password" in payload:
                 password = payload.get("password") or ""
                 if not password:
@@ -393,6 +552,11 @@ def create_app(testing: bool = False):
             if not updated:
                 return jsonify({"error": "Update failed"}), 400
             fresh = db.get_user(user_id)
+            if email_changed:
+                private_user = db.get_user_by_email(fresh["email"])
+                sent, _ = _issue_verification_code(private_user, enforce_cooldown=False)
+                if sent is False:
+                    return jsonify({"error": "profile updated, but verification email could not be sent"}), 503
             return jsonify(fresh), 200
 
         user = db.get_user(user_id)

@@ -5,6 +5,7 @@ import FilterBar from './components/FilterBar';
 import ItemCard from './components/ItemCard';
 import PostItemModal from './components/PostItemModal';
 import AuthModal from './components/AuthModal';
+import EmailVerificationModal from './components/EmailVerificationModal';
 import ItemDetail from './components/ItemDetail';
 import Profile from './components/Profile';
 import Messages from './components/Messages';
@@ -35,6 +36,8 @@ import {
   toUser,
   ApiThread,
   clearPresence,
+  verifyEmail,
+  resendVerification,
 } from './api';
 
 const USER_STORAGE_KEY = 'nyu_swap_user';
@@ -54,6 +57,7 @@ const App: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [auth, setAuth] = useState<AuthState>({ isOpen: false, mode: 'login' });
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
@@ -332,6 +336,9 @@ const App: React.FC = () => {
                             email,
                             password,
                         });
+                        if (updated.email_verified === false && updated.email !== currentUser.email) {
+                            setVerificationEmail(updated.email);
+                        }
                         setCurrentUser((prev) =>
                             prev
                                 ? {
@@ -561,15 +568,44 @@ const App: React.FC = () => {
         onClose={() => setAuth(prev => ({ ...prev, isOpen: false }))}
         onLogin={async ({ email, password, name }) => {
             const isRegister = auth.mode === 'register';
-            const response = isRegister
-              ? await registerUser({ email, password, nickname: name })
-              : await loginUser({ email, password });
-            localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
-            setCurrentUser(toUser(response.user));
-            setAuth(prev => ({ ...prev, isOpen: false }));
+            if (isRegister) {
+              const response = await registerUser({ email, password, nickname: name });
+              setVerificationEmail(response.email);
+              setAuth(prev => ({ ...prev, isOpen: false }));
+              return;
+            }
+            try {
+              const response = await loginUser({ email, password });
+              localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+              setCurrentUser(toUser(response.user));
+              setAuth(prev => ({ ...prev, isOpen: false }));
+            } catch (err: any) {
+              if (err?.status === 403) {
+                setVerificationEmail(email.trim().toLowerCase());
+                setAuth(prev => ({ ...prev, isOpen: false }));
+                return;
+              }
+              throw err;
+            }
         }}
         onChangeMode={(mode) => setAuth(prev => ({ ...prev, mode }))}
       />
+
+      {verificationEmail && (
+        <EmailVerificationModal
+          email={verificationEmail}
+          onClose={() => setVerificationEmail(null)}
+          onVerify={async (code) => {
+            const response = await verifyEmail({ email: verificationEmail, code });
+            localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+            setCurrentUser(toUser(response.user));
+            setVerificationEmail(null);
+          }}
+          onResend={async () => {
+            await resendVerification(verificationEmail);
+          }}
+        />
+      )}
     </div>
   );
 };
