@@ -1,6 +1,8 @@
 import { Category, Item, User } from './types';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5002';
+const viteEnv = (import.meta as any).env || {};
+const configuredApiBaseUrl = String(viteEnv.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const API_BASE_URL = configuredApiBaseUrl || (viteEnv.DEV ? 'http://localhost:5002' : window.location.origin);
 
 export interface ApiUser {
   id: string;
