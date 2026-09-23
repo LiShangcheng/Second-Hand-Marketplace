@@ -29,4 +29,4 @@ ENV PORT=5000
 
 EXPOSE 5000
 
-CMD ["python", "-m", "services.api.app"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --worker-tmp-dir /dev/shm --access-logfile - --error-logfile - services.api.wsgi:app"]

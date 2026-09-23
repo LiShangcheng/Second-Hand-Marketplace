@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from pymongo import MongoClient
@@ -211,7 +211,7 @@ class Database:
         name: Optional[str] = None,
         **extra: Any,
     ) -> Dict[str, Any]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         item: Dict[str, Any] = {
             "title": title,
             "name": name or title,
@@ -314,7 +314,7 @@ class Database:
                         "name": "Welcome",
                         "price": 0,
                         "description": "Sample item",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                         "category": "other",
                         "meetup_point": "Campus Center",
                         "user_id": "1",
@@ -330,7 +330,7 @@ class Database:
                         "name": "Notebook",
                         "price": 5.5,
                         "description": "Stationery",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                         "category": "textbook",
                         "meetup_point": "Library",
                         "user_id": "2",
@@ -354,7 +354,7 @@ class Database:
         buyer_name: Optional[str] = None,
         seller_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc: Dict[str, Any] = {
             "buyer_id": buyer_id,
             "seller_id": seller_id,
@@ -397,7 +397,7 @@ class Database:
     # ---------- Messages ----------
 
     def create_message(self, thread_id: str, sender_id: str, receiver_id: str, content: str) -> Dict[str, Any]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc: Dict[str, Any] = {
             "thread_id": thread_id,
             "sender_id": sender_id,

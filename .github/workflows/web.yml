@@ -1,0 +1,48 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Audit and build web application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/web
+        run: npm ci
+
+      - name: Audit dependencies
+        working-directory: services/web
+        run: npm audit --audit-level=high
+
+      - name: Build application
+        working-directory: services/web
+        run: npm run build
+
+      - name: Upload production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: services/web/dist

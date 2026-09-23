@@ -1,277 +1,241 @@
 # NYU Campus Marketplace
 
-[![API CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml)
-[![Web CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml)
-[![MongoDB CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/mongo.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/mongo.yml)
-[![Test Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](./services/api/tests/)
+[![API CI](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml/badge.svg?branch=main)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml)
+[![Web CI](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml)
+[![Container CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/deploy.yml)
+[![Coverage](https://img.shields.io/badge/coverage-85.64%25-brightgreen)](services/api/tests)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-A full-stack secondhand marketplace for NYU students to buy, sell, and trade campus items. Built with Flask, MongoDB, Docker, and deployed to DigitalOcean App Platform.
-The intuition we had for this project came from our own experiences—every semester, our team members buy textbooks and furniture at the start, but at the end of the semester, we have to discard or waste them. We don't want to waste money or these resources, and we know there are students in the market who really want to buy these secondhand textbooks or items. Current solutions like Facebook Marketplace lack campus context, safety through university verification, and student-specific features. NYU Campus Marketplace solves this by creating a trusted, campus-centric trading platform exclusively for NYU students, featuring NYU email verification, campus-specific filtering (Brooklyn vs Washington Square), course code tagging for textbooks, and suggested meetup points students actually know, like Rogers Hall or Bobst Library.
+NYU Campus Marketplace is a student-focused secondhand marketplace for buying, selling, and exchanging items around NYU's Brooklyn and Washington Square campuses. The application uses React, Flask, MongoDB, and Docker and is deployed as one DigitalOcean App Platform service.
 
-## 👥 Team
+## Features
 
-- **Leo Li** - [Leo Li](https://github.com/LiShangcheng)
+- Browse and filter listings by category, campus, and keyword.
+- Create and edit listings with multiple images and meetup locations.
+- Mark listings as sold and manage personal listings from a profile.
+- Save and remove favorite listings.
+- Create buyer/seller conversations, send messages and images, and track unread messages.
+- Register with an `@nyu.edu` address and verify it with a six-digit email code.
+- Update profile information and upload an avatar.
+- Enforce verification-code expiry, resend cooldowns, and attempt limits.
 
-## 📋 Features
+## Architecture
 
-- **Browse & Search**: Filter items by category, campus location, and keywords
-- **Post Listings**: Create listings with images, descriptions, and course codes (for textbooks)
-- **Messaging**: Real-time chat between buyers and sellers
-- **Favorites**: Save items to wishlist
-- **User Profiles**: Manage listings and avatars
-- **NYU Email Verification**: Require a one-time code before a new account can sign in
-- **Campus-Specific**: NYU Brooklyn/Tandon and Washington Square locations
+Production uses one container and one public origin:
 
-## 🏗️ System Architecture
+```text
+Browser
+  └── DigitalOcean App Platform / Gunicorn / Flask
+        ├── /static/*  React production bundle
+        ├── /api/*     REST API
+        └── MongoDB Atlas
+```
 
-**Three subsystems:**
+The root [Dockerfile](Dockerfile) is a multi-stage build. Node builds the Vite frontend, the resulting bundle is copied into Flask's static directory, and Gunicorn serves the combined application on `PORT`.
 
-1. **Flask API** (`services/api/`) - Python REST backend
-   - Docker Image (CI): [leoli120959/marketplace-api:latest](https://hub.docker.com/r/leoli120959/marketplace-api)  
-   - Docker Image (App Platform): [leoli120959/swap-hub-api:latest](https://hub.docker.com/r/leoli120959/swap-hub-api)
-   - Port: env `PORT` (compose sets 5001 and maps to host 5002; default 5000 if unset)
+Local development can still run the frontend, API, and MongoDB as separate Docker Compose services.
 
-2. **MongoDB** (`services/mongo/`) - Data persistence
-   - Docker Image: [leoli120959/marketplace-mongo:latest](https://hub.docker.com/r/leoli120959/marketplace-mongo)
-   - Port: 27017 (mapped to 27018 on host)
+## Quick start
 
-3. **Web Frontend** (`services/web/`) - Vite + React UI
-   - Docker Image: [leoli120959/marketplace-web:latest](https://hub.docker.com/r/leoli120959/marketplace-web)
-   - Port: 3000
+### Docker Compose
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker and Docker Compose
-- Git
-
-### Run with Docker (Recommended)
+Requirements: Docker, Docker Compose, and Git.
 
 ```bash
-git clone https://github.com/swe-students-fall2025/5-final-reallyawesome.git
-cd 5-final-reallyawesome
-
-# Create environment file
+git clone https://github.com/LiShangcheng/Second-Hand-Marketplace.git
+cd Second-Hand-Marketplace
 cp .env.example .env
-
-# Start services
 docker compose up --build
 ```
 
-Open http://localhost:3000 in your browser for the UI, and http://localhost:5002 for the API.
+- Frontend: <http://localhost:3000>
+- API health check: <http://localhost:5002/api/health>
+- MongoDB: `localhost:27018`
 
-### Run Locally (Development)
+### Run the services directly
+
+Backend:
 
 ```bash
-# Setup Python environment
-cd services/api
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# Use mock database for testing
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r services/api/requirements.txt
 export USE_MOCK_DB=1
-
-# Start Flask dev server
-python app.py
+python -m services.api.app
 ```
 
-Open http://localhost:5000
-
-### Run Frontend Locally
+Frontend, in another terminal:
 
 ```bash
 cd services/web
-npm install
+npm ci
 npm run dev
 ```
 
-Open http://localhost:3000
+## Configuration
 
-## ⚙️ Configuration
+Copy `.env.example` to `.env` for local development. In DigitalOcean, configure these as component-level Runtime variables. Encrypt secrets.
 
-### Environment Variables
+| Variable | Required | Description | Default |
+|---|---:|---|---|
+| `MONGO_URI` | Production | MongoDB Atlas connection string | `mongodb://localhost:27017` |
+| `MONGO_DB` | Yes | Database name | `marketplace` |
+| `PORT` | Yes | HTTP port | `5000` |
+| `CORS_ORIGIN` | Separate frontend only | Allowed frontend origin | `http://localhost:3000` |
+| `USE_MOCK_DB` | Tests only | Use the in-memory database | `0` |
+| `VERIFICATION_SECRET` | Yes | HMAC secret for verification codes | Development placeholder |
+| `VERIFICATION_TTL_MINUTES` | No | Code lifetime | `10` |
+| `VERIFICATION_RESEND_SECONDS` | No | Resend cooldown | `60` |
+| `VERIFICATION_MAX_ATTEMPTS` | No | Attempts before a new code is required | `5` |
 
-Create `.env` from `.env.example`:
+Because production serves the UI and API from the same origin, `VITE_API_BASE_URL` is not required for the single-container deployment.
 
-```bash
-cp .env.example .env
-```
+## Email verification
 
-**Required variables:**
+The complete registration flow is:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| MONGO_URI | MongoDB connection string | mongodb://mongo:27017 |
-| MONGO_DB | Database name | marketplace |
-| PORT | API server port | 5001 |
+1. `POST /api/auth/register` creates an unverified account and sends a code.
+2. `POST /api/auth/verify-email` validates the code and signs the user in.
+3. `POST /api/auth/resend-verification` issues a replacement code after the cooldown.
+4. Unverified accounts cannot log in.
 
-**Optional:**
+### Development mode
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| USE_MOCK_DB | Use in-memory DB for testing | 0 |
-
-### Email verification
-
-Local development defaults to `MAIL_MODE=console`. Verification codes are printed in the API logs:
+`MAIL_MODE=console` does not send real email. It writes the code to API logs:
 
 ```bash
 docker compose logs -f api
 ```
 
-To send real email, set `MAIL_MODE=smtp` and configure `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM` in `.env`. Copy `.env.example`
-for the complete list of options. Verification codes expire after 10 minutes, allow
-five attempts, and have a 60-second resend cooldown by default.
+### SMTP mode
 
-Registration returns `verification_required` instead of a login token. Complete the
-flow with `POST /api/auth/verify-email`; use `POST /api/auth/resend-verification` to
-request a replacement code.
+Set the following DigitalOcean component-level Runtime variables to send real mail:
 
-### Database Seeding
-
-MongoDB automatically seeds initial data on startup via `services/mongo/initdb/init.js`:
-- Sample "Welcome" item
-- Sample "Notebook" item
-
-## 🧪 Testing
-
-Run all tests with coverage reporting:
-
-```bash
-cd services/api
-pytest --cov=. --cov-report=term --cov-report=xml
+```text
+MAIL_MODE=smtp
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+SMTP_FROM=verified-sender@example.com
+SMTP_USE_TLS=1
 ```
 
-Verify 80% coverage threshold:
+Encrypt `SMTP_PASSWORD`, `SMTP_USERNAME`, and `VERIFICATION_SECRET`. `SMTP_FROM` must be an address accepted by the selected SMTP provider. The automated suite verifies message construction, STARTTLS, authentication, sending, expiry, resend cooldown, invalid codes, attempt limits, and recovery after delivery failures. A real inbox delivery test still requires valid provider credentials in DigitalOcean.
+
+## Tests
+
+### API and email tests
+
 ```bash
-coverage report --fail-under=80
+python -m pytest \
+  --cov=services.api \
+  --cov-report=term-missing \
+  --cov-report=xml \
+  --cov-fail-under=80
 ```
 
-**Test Coverage**: Authentication, listings, search, messaging, favorites (80%+)
+Current verified result: **62 tests passed**, with **85.64% coverage**. `email_service.py` has 100% line coverage.
 
-## 📡 API Endpoints
+### Frontend build and dependency audit
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
+```bash
+cd services/web
+npm ci
+npm audit --audit-level=high
+npm run build
+```
+
+### Production container
+
+```bash
+docker build -t nyu-swap-hub .
+docker run --rm -p 5000:5000 \
+  -e USE_MOCK_DB=1 \
+  -e PORT=5000 \
+  nyu-swap-hub
+```
+
+Then check <http://localhost:5000/> and <http://localhost:5000/api/health>.
+
+## DigitalOcean deployment
+
+Create one App Platform Web Service from this repository:
+
+| Setting | Value |
+|---|---|
+| Branch | `main` |
+| Source directory | Repository root / blank |
+| Dockerfile | `Dockerfile` |
+| Public HTTP port | `5000` |
+| Containers | `1` |
+| Health check | `/api/health` |
+
+Add the runtime variables described above, including an encrypted Atlas `MONGO_URI`. Atlas must allow traffic from the application's egress addresses; `0.0.0.0/0` is acceptable only for a short-lived demo with strong database credentials.
+
+## CI/CD
+
+The tracked GitHub Actions workflows are:
+
+- `api.yml`: runs all Flask, MongoDB-mock, authentication, and email tests with an 80% coverage gate.
+- `web.yml`: installs locked Node dependencies, runs `npm audit`, builds the Vite bundle, and uploads the bundle artifact.
+- `deploy.yml`: builds the root production image, reruns the API suite inside it, starts the image, and smoke-tests the homepage, health endpoint, and compiled JavaScript. It can then trigger a DigitalOcean deployment.
+
+For gated deployment, disable App Platform's source Autodeploy and add these GitHub repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Purpose |
+|---|---|
+| `DO_API_TOKEN` | DigitalOcean personal access token |
+| `DO_APP_ID` | App Platform application ID |
+
+`DO_API_APP_ID` is also accepted as a backward-compatible alternative to `DO_APP_ID`. If these secrets are absent, the workflow completes verification and skips its explicit deploy step; DigitalOcean source Autodeploy may remain enabled instead.
+
+The badges at the top of this README become active after the workflow files are committed, pushed to `main`, and their first GitHub Actions runs complete.
+
+## API overview
+
+| Endpoint | Methods | Purpose |
+|---|---|---|
 | `/api/health` | GET | Health check |
-| `/api/listings` | GET/POST | Browse/create listings |
-| `/api/auth/register` | POST | Register user |
-| `/api/auth/verify-email` | POST | Verify a six-digit email code |
-| `/api/auth/resend-verification` | POST | Request a new verification code |
-| `/api/auth/login` | POST | Login user |
-| `/api/threads` | POST/GET | Create/fetch message threads |
-| `/api/messages` | POST/GET | Send/fetch messages |
-| `/api/favorites` | POST/DELETE/GET | Manage wishlist |
+| `/api/listings` | GET, POST | Browse and create listings |
+| `/api/listings/<id>` | GET, PUT | View or update a listing |
+| `/api/auth/register` | POST | Register and send a verification code |
+| `/api/auth/verify-email` | POST | Verify a six-digit code |
+| `/api/auth/resend-verification` | POST | Send a replacement code |
+| `/api/auth/login` | POST | Log in a verified user |
+| `/api/users/<id>` | GET, PUT | Read or update a profile |
+| `/api/favorites` | GET, POST, DELETE | Manage saved listings |
+| `/api/threads` | GET, POST | Manage conversations |
+| `/api/messages` | GET, POST | Read and send messages |
+| `/api/messages/upload` | POST | Upload an image for a message |
 
-See `services/api/app.py` for complete endpoint documentation.
+## Project structure
 
-## 🐳 Docker Images
-
-Pre-built images available on Docker Hub:
-
-```bash
-# Pull and run API (App Platform image)
-docker pull leoli120959/swap-hub-api:latest
-docker run -p 5002:5001 -e PORT=5001 leoli120959/swap-hub-api:latest
-
-# Pull and run MongoDB
-docker pull leoli120959/marketplace-mongo:latest
-docker run -p 27018:27017 leoli120959/marketplace-mongo:latest
-```
-
-Manual build:
-```bash
-docker build -f services/api/Dockerfile -t leoli120959/marketplace-api:latest .
-docker build -f services/mongo/Dockerfile -t leoli120959/marketplace-mongo:latest services/mongo/
-```
-
-## 🔄 CI/CD Pipeline
-
-Three independent GitHub Actions workflows run for every pull request to `main`/`master` and every push to those branches:
-
-- **api.yml**: runs the Python test suite with an 80% coverage gate, builds the API image, publishes both `marketplace-api` and backward-compatible `swap-hub-api` tags, then deploys the API.
-- **web.yml**: installs dependencies from the lock file, builds the Vite application and image, publishes `marketplace-web`, then deploys the frontend.
-- **mongo.yml**: starts the MongoDB image and verifies its seed data, publishes `marketplace-mongo`, then optionally redeploys it.
-
-Pull requests only test and build. Pushes to `main`/`master` publish both `latest` and immutable commit-SHA image tags. DigitalOcean deployment is skipped when its app ID is not configured.
-
-Configure these GitHub repository secrets under **Settings → Secrets and variables → Actions**:
-
-| Name | Required | Purpose |
-|------|----------|---------|
-| `DOCKERHUB_USERNAME` | Yes | Docker Hub namespace (for this repository, `leoli120959`) |
-| `DOCKERHUB_TOKEN` | Yes | Docker Hub access token with read/write permission |
-| `DO_API_TOKEN` | For deployment | DigitalOcean personal access token |
-| `DO_API_APP_ID` | For API deployment | API App Platform app ID (`DO_APP_ID` is also accepted for compatibility) |
-| `DO_WEB_APP_ID` | For web deployment | Frontend App Platform app ID |
-| `DO_MONGO_APP_ID` | Optional | MongoDB App Platform app ID, if MongoDB is deployed as a separate app |
-
-Also add the repository Actions variable `VITE_API_BASE_URL` with the public API URL, for example `https://api.example.com`. The value is compiled into the frontend image. Configure runtime secrets such as `MONGO_URI`, `MONGO_DB`, `CORS_ORIGIN`, and SMTP credentials in DigitalOcean App Platform rather than in the image-build workflow.
-
-## 📁 Project Structure
-
-```
+```text
+.
+├── .github/workflows/       GitHub Actions CI/CD
+├── Dockerfile               Production single-container build
+├── docker-compose.yml       Local three-service environment
 ├── services/
-│   ├── api/                 # Flask REST API
-│   │   ├── app.py          # Main application
-│   │   ├── db.py           # MongoDB interface
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   └── tests/          # Unit tests
-│   └── mongo/              # MongoDB setup
-│       ├── Dockerfile
-│       └── initdb/         # Seed data
-│   └── web/                # Vite + React frontend
-│       ├── Dockerfile
-│       └── package.json
-├── docker-compose.yml      # Service orchestration
-└── .env.example            # Environment template
+│   ├── api/                 Flask API, email service, tests, static output
+│   ├── mongo/               Local MongoDB image and seed data
+│   └── web/                 React and Vite frontend
+└── .env.example             Local configuration template
 ```
 
-## 🔒 Security Notes
+## Known production limitations
 
-**Demo project - NOT production-ready:**
+This remains a demo project, not a production-hardened marketplace:
 
-- Passwords stored in plaintext (no bcrypt)
-- Session management in memory
-- No CSRF protection
-- No rate limiting
+- Passwords are currently stored without a password-hashing migration.
+- API authorization is not enforced consistently on all user-owned resources.
+- Authentication and presence state are held in process memory.
+- Uploaded images use the container filesystem and can disappear after a redeploy; use Spaces or another object store for persistence.
+- Messaging uses HTTP refreshes rather than WebSockets.
+- CSRF protection and rate limiting are not yet implemented.
 
-**Production TODO:**
-- Add bcrypt password hashing
-- Use JWT tokens with Redis sessions
-- Implement CSRF protection
-- Add rate limiting (Flask-Limiter)
-- Input validation with Marshmallow
-- HTTPS with SSL certificates
+Use one application container until authentication and presence state move to shared persistent storage.
 
-## 🐛 Troubleshooting
+## License
 
-**Port conflicts?**
-```bash
-# Change host port in docker-compose.yml
-ports:
-  - "5003:5001"  # Use 5003 instead of 5002
-```
-
-**MongoDB connection fails?**
-```bash
-# Verify MongoDB is running
-docker compose ps
-
-# Check logs
-docker compose logs mongo
-```
-
-**Tests fail locally?**
-```bash
-# Use mock database
-export USE_MOCK_DB=1
-pytest services/api/tests/
-```
-
-## 📄 License
-
-GNU General Public License v3.0 - see LICENSE file for details.
+GNU General Public License v3.0. See [LICENSE](LICENSE).

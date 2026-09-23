@@ -1,0 +1,100 @@
+name: Container CI/CD
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build and smoke-test production image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: marketplace:ci
+          cache-from: type=gha,scope=production
+          cache-to: type=gha,mode=max,scope=production
+
+      - name: Run API test suite inside image
+        run: >-
+          docker run --rm
+          -e USE_MOCK_DB=1
+          marketplace:ci
+          python -m pytest
+          --cov=services.api
+          --cov-fail-under=80
+
+      - name: Start production image
+        run: >-
+          docker run --detach
+          --name marketplace-smoke
+          -e USE_MOCK_DB=1
+          -e PORT=5000
+          -p 5000:5000
+          marketplace:ci
+
+      - name: Verify frontend, API, and static assets
+        shell: bash
+        run: |
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5000/api/health > /tmp/health.json; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "true"
+          grep --quiet '"status":"ok"' /tmp/health.json
+          curl --fail --silent http://127.0.0.1:5000/ | grep --quiet "NYU Swap Hub"
+          asset_path=$(curl --fail --silent http://127.0.0.1:5000/ | sed -n 's/.*src="\([^"]*assets[^"]*\.js\)".*/\1/p')
+          test -n "$asset_path"
+          curl --fail --silent --output /dev/null "http://127.0.0.1:5000${asset_path}"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs marketplace-smoke || true
+
+      - name: Remove smoke-test container
+        if: always()
+        run: docker rm --force marketplace-smoke || true
+
+  deploy:
+    name: Deploy to DigitalOcean
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      DO_API_TOKEN: ${{ secrets.DO_API_TOKEN }}
+      DO_APP_ID: ${{ secrets.DO_APP_ID || secrets.DO_API_APP_ID }}
+    steps:
+      - name: Install doctl
+        if: env.DO_API_TOKEN != '' && env.DO_APP_ID != ''
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ env.DO_API_TOKEN }}
+
+      - name: Deploy verified commit
+        if: env.DO_API_TOKEN != '' && env.DO_APP_ID != ''
+        run: doctl apps create-deployment "$DO_APP_ID" --force-rebuild --wait
+
+      - name: Report source autodeploy mode
+        if: env.DO_API_TOKEN == '' || env.DO_APP_ID == ''
+        run: echo "Verification passed. Explicit deployment skipped; configure DO_API_TOKEN and DO_APP_ID, or keep DigitalOcean source autodeploy enabled."

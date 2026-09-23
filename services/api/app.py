@@ -346,7 +346,7 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             if status:
                 updates["status"] = status
                 if status == "sold":
-                    updates["sold_at"] = datetime.utcnow().isoformat()
+                    updates["sold_at"] = datetime.now(timezone.utc).isoformat()
                 else:
                     updates["sold_at"] = None
             if "title" in data or "name" in data:

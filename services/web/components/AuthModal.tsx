@@ -10,8 +10,6 @@ interface AuthModalProps {
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeMode }) => {
-  if (!auth.isOpen) return null;
-
   const isLogin = auth.mode === 'login';
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,6 +21,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
   useEffect(() => {
     setError(null);
   }, [auth.mode]);
+
+  if (!auth.isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,11 +135,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
                             required 
                         />
                     </div>
-                    {isLogin && (
-                        <div className="flex justify-end pt-1">
-                            <a href="#" className="text-xs font-semibold text-[#57068c] hover:underline">Forgot password?</a>
-                        </div>
-                    )}
                 </div>
                 {!isLogin && (
                     <div className="space-y-1">
