@@ -160,6 +160,15 @@ class Database:
 
     # ---------- Listings ----------
 
+    def _hydrate_item_user(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        user_id = str(item.get("user_id") or "")
+        if not user_id:
+            return item
+        current_user = self.get_user(user_id)
+        if current_user:
+            item["user"] = current_user
+        return item
+
     def list_items(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         filters = filters or {}
         query: Dict[str, Any] = {}
@@ -187,7 +196,7 @@ class Database:
                 continue
             if "name" not in doc and "title" in doc:
                 doc["name"] = doc["title"]
-            items.append(doc)
+            items.append(self._hydrate_item_user(doc))
         return items
 
     def get_item(self, item_id: str) -> Optional[Dict[str, Any]]:
@@ -201,7 +210,7 @@ class Database:
         doc["id"] = str(doc.pop("_id", ""))
         if "name" not in doc and "title" in doc:
             doc["name"] = doc["title"]
-        return doc
+        return self._hydrate_item_user(doc)
 
     def create_item(
         self,

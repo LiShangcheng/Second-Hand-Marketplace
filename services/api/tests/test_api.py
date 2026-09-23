@@ -376,6 +376,47 @@ def test_get_user_listings(client):
     assert isinstance(data, list)
 
 
+def test_listing_and_favorite_use_current_seller_profile(client):
+    seller = create_test_user(client, "ProfileSeller")
+    buyer = create_test_user(client, "ProfileBuyer")
+    listing_resp = client.post(
+        "/api/listings",
+        json={
+            "title": "Current seller profile",
+            "price": 15,
+            "user_id": seller["id"],
+        },
+    )
+    assert listing_resp.status_code == 201
+    listing_id = listing_resp.get_json()["id"]
+
+    database = client.application.extensions["database"]
+    database.update_user(
+        seller["id"],
+        {
+            "nickname": "Updated Seller",
+            "avatar": "/static/uploads/current-avatar.webp",
+        },
+    )
+
+    favorite_resp = client.post(
+        "/api/favorites",
+        json={"user_id": buyer["id"], "listing_id": listing_id},
+    )
+    assert favorite_resp.status_code == 201
+
+    listings_resp = client.get("/api/listings?status=all")
+    current_listing = next(item for item in listings_resp.get_json() if item["id"] == listing_id)
+    assert current_listing["user"]["nickname"] == "Updated Seller"
+    assert current_listing["user"]["avatar"] == "/static/uploads/current-avatar.webp"
+
+    favorites_resp = client.get(f"/api/users/{buyer['id']}/favorites")
+    assert favorites_resp.status_code == 200
+    saved_listing = favorites_resp.get_json()["favorites"][0]
+    assert saved_listing["user"]["nickname"] == "Updated Seller"
+    assert saved_listing["user"]["avatar"] == "/static/uploads/current-avatar.webp"
+
+
 def test_register(client):
     resp = client.post(
         "/api/auth/register",
