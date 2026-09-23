@@ -1,7 +1,8 @@
 # NYU Campus Marketplace
 
-[![API CI/CD](https://github.com/swe-students-fall2025/5-final-reallyawesome/actions/workflows/api.yml/badge.svg)](https://github.com/swe-students-fall2025/5-final-reallyawesome/actions/workflows/api.yml)
-[![MongoDB CI/CD](https://github.com/swe-students-fall2025/5-final-reallyawesome/actions/workflows/mongo.yml/badge.svg)](https://github.com/swe-students-fall2025/5-final-reallyawesome/actions/workflows/mongo.yml)
+[![API CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/api.yml)
+[![Web CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/web.yml)
+[![MongoDB CI/CD](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/mongo.yml/badge.svg)](https://github.com/LiShangcheng/Second-Hand-Marketplace/actions/workflows/mongo.yml)
 [![Test Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](./services/api/tests/)
 
 A full-stack secondhand marketplace for NYU students to buy, sell, and trade campus items. Built with Flask, MongoDB, Docker, and deployed to DigitalOcean App Platform.
@@ -35,6 +36,7 @@ The intuition we had for this project came from our own experiences—every seme
    - Port: 27017 (mapped to 27018 on host)
 
 3. **Web Frontend** (`services/web/`) - Vite + React UI
+   - Docker Image: [leoli120959/marketplace-web:latest](https://hub.docker.com/r/leoli120959/marketplace-web)
    - Port: 3000
 
 ## 🚀 Quick Start
@@ -187,17 +189,26 @@ docker build -f services/mongo/Dockerfile -t leoli120959/marketplace-mongo:lates
 
 ## 🔄 CI/CD Pipeline
 
-GitHub Actions workflows trigger on push/PR to `main`:
+Three independent GitHub Actions workflows run for every pull request to `main`/`master` and every push to those branches:
 
-- **api.yml**: Tests API, builds/pushes Docker image, triggers DigitalOcean App Platform deploy (if DO secrets set)
-- **mongo.yml**: Builds/pushes MongoDB image, triggers DigitalOcean App Platform deploy (if DO secrets set)
-- **build-push.yml**: Builds/pushes `swap-hub-api` image for App Platform
+- **api.yml**: runs the Python test suite with an 80% coverage gate, builds the API image, publishes both `marketplace-api` and backward-compatible `swap-hub-api` tags, then deploys the API.
+- **web.yml**: installs dependencies from the lock file, builds the Vite application and image, publishes `marketplace-web`, then deploys the frontend.
+- **mongo.yml**: starts the MongoDB image and verifies its seed data, publishes `marketplace-mongo`, then optionally redeploys it.
 
-Required secrets in GitHub:
-- `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` - Docker Hub creds
-- (Optional deploy) `DO_API_TOKEN`, `DO_APP_ID` - to trigger App Platform redeploy for API
-- (Optional deploy) `DO_MONGO_APP_ID` - to trigger Mongo-related App Platform redeploy
-- `MONGO_URI`, `MONGO_DB` - Production MongoDB connection
+Pull requests only test and build. Pushes to `main`/`master` publish both `latest` and immutable commit-SHA image tags. DigitalOcean deployment is skipped when its app ID is not configured.
+
+Configure these GitHub repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Name | Required | Purpose |
+|------|----------|---------|
+| `DOCKERHUB_USERNAME` | Yes | Docker Hub namespace (for this repository, `leoli120959`) |
+| `DOCKERHUB_TOKEN` | Yes | Docker Hub access token with read/write permission |
+| `DO_API_TOKEN` | For deployment | DigitalOcean personal access token |
+| `DO_API_APP_ID` | For API deployment | API App Platform app ID (`DO_APP_ID` is also accepted for compatibility) |
+| `DO_WEB_APP_ID` | For web deployment | Frontend App Platform app ID |
+| `DO_MONGO_APP_ID` | Optional | MongoDB App Platform app ID, if MongoDB is deployed as a separate app |
+
+Also add the repository Actions variable `VITE_API_BASE_URL` with the public API URL, for example `https://api.example.com`. The value is compiled into the frontend image. Configure runtime secrets such as `MONGO_URI`, `MONGO_DB`, `CORS_ORIGIN`, and SMTP credentials in DigitalOcean App Platform rather than in the image-build workflow.
 
 ## 📁 Project Structure
 
