@@ -622,6 +622,10 @@ def create_app(testing: bool = False):
         if buyer_id == seller_id:
             return jsonify({"error": "buyer and seller cannot be the same user"}), 400
 
+        existing_thread = db.find_thread(buyer_id, seller_id, listing_id)
+        if existing_thread:
+            return jsonify(existing_thread), 200
+
         # Fallback names from known users or listing if not provided
         if not buyer_name:
             buyer_user = db.get_user(buyer_id)

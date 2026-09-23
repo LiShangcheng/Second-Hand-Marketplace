@@ -368,6 +368,39 @@ class Database:
         doc["id"] = str(result.inserted_id)
         return doc
 
+    def find_thread(self, buyer_id: str, seller_id: str, listing_id: str) -> Optional[Dict[str, Any]]:
+        candidates = [
+            dict(doc)
+            for doc in self._db.threads.find(
+                {
+                    "buyer_id": str(buyer_id),
+                    "seller_id": str(seller_id),
+                    "listing_id": str(listing_id),
+                }
+            )
+        ]
+        if not candidates:
+            return None
+
+        message_counts: Dict[str, int] = {}
+        for message in self._db.messages.find():
+            thread_id = str(message.get("thread_id") or "")
+            message_counts[thread_id] = message_counts.get(thread_id, 0) + 1
+
+        # Existing data may already contain duplicates. Prefer the conversation
+        # with the most history; for ties, preserve the oldest thread.
+        preferred = min(
+            candidates,
+            key=lambda doc: (
+                -message_counts.get(str(doc.get("_id")), 0),
+                doc.get("created_at", ""),
+            ),
+        )
+        preferred["id"] = str(preferred.pop("_id", ""))
+        preferred["buyer_name"] = preferred.get("buyer_name") or f"User {preferred.get('buyer_id')}"
+        preferred["seller_name"] = preferred.get("seller_name") or f"User {preferred.get('seller_id')}"
+        return preferred
+
     def get_thread(self, thread_id: str) -> Optional[Dict[str, Any]]:
         try:
             doc = self._db.threads.find_one({"_id": ObjectId(thread_id)})
@@ -386,13 +419,39 @@ class Database:
             for doc in docs
             if doc.get("buyer_id") == user_id or doc.get("seller_id") == user_id
         ]
+
+        message_counts: Dict[str, int] = {}
+        for message in self._db.messages.find():
+            thread_id = str(message.get("thread_id") or "")
+            message_counts[thread_id] = message_counts.get(thread_id, 0) + 1
+
+        deduplicated: Dict[tuple, Dict[str, Any]] = {}
         for doc in filtered:
+            thread_id = str(doc.get("_id", ""))
+            listing_id = doc.get("listing_id")
+            key = (
+                str(doc.get("buyer_id") or ""),
+                str(doc.get("seller_id") or ""),
+                str(listing_id) if listing_id is not None else thread_id,
+            )
+            current = deduplicated.get(key)
+            if current is None:
+                deduplicated[key] = doc
+                continue
+            current_id = str(current.get("_id", ""))
+            candidate_score = (-message_counts.get(thread_id, 0), doc.get("created_at", ""))
+            current_score = (-message_counts.get(current_id, 0), current.get("created_at", ""))
+            if candidate_score < current_score:
+                deduplicated[key] = doc
+
+        result = list(deduplicated.values())
+        for doc in result:
             doc["id"] = str(doc.pop("_id", ""))
             # Ensure names are present for UI display
             doc["buyer_name"] = doc.get("buyer_name") or f"User {doc.get('buyer_id')}"
             doc["seller_name"] = doc.get("seller_name") or f"User {doc.get('seller_id')}"
-        filtered.sort(key=lambda d: d.get("created_at", ""), reverse=True)
-        return filtered
+        result.sort(key=lambda d: d.get("created_at", ""), reverse=True)
+        return result
 
     # ---------- Messages ----------
 

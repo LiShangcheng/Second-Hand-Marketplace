@@ -707,6 +707,84 @@ def test_create_thread(client):
     assert data["listing_id"] == listing_resp.get_json()["id"]
 
 
+def test_create_thread_reuses_existing_conversation(client):
+    buyer, seller, listing_resp, first_resp = create_chat_thread(client, "Reusable thread")
+    assert first_resp.status_code == 201
+    first_thread = first_resp.get_json()
+
+    second_resp = client.post(
+        "/api/threads",
+        json={
+            "buyer_id": buyer["id"],
+            "seller_id": seller["id"],
+            "listing_id": listing_resp.get_json()["id"],
+        },
+        headers=auth_headers(client, buyer["id"]),
+    )
+
+    assert second_resp.status_code == 200
+    assert second_resp.get_json()["id"] == first_thread["id"]
+
+    threads_resp = client.get(
+        f"/api/threads/{buyer['id']}",
+        headers=auth_headers(client, buyer["id"]),
+    )
+    matching_threads = [
+        thread
+        for thread in threads_resp.get_json()
+        if thread["listing_id"] == listing_resp.get_json()["id"]
+    ]
+    assert len(matching_threads) == 1
+
+
+def test_thread_list_hides_legacy_duplicates_and_keeps_history(client):
+    buyer, seller, listing_resp, original_resp = create_chat_thread(client, "Legacy duplicate")
+    original_thread = original_resp.get_json()
+    listing_id = listing_resp.get_json()["id"]
+
+    message_resp = client.post(
+        "/api/messages",
+        json={
+            "thread_id": original_thread["id"],
+            "sender_id": buyer["id"],
+            "content": "Keep this conversation",
+        },
+        headers=auth_headers(client, buyer["id"]),
+    )
+    assert message_resp.status_code == 201
+
+    database = client.application.extensions["database"]
+    duplicate = database.create_thread(
+        buyer_id=buyer["id"],
+        seller_id=seller["id"],
+        listing_id=listing_id,
+        buyer_name="Buyer",
+        seller_name="Seller",
+    )
+    assert duplicate["id"] != original_thread["id"]
+
+    threads_resp = client.get(
+        f"/api/threads/{buyer['id']}",
+        headers=auth_headers(client, buyer["id"]),
+    )
+    matching_threads = [
+        thread for thread in threads_resp.get_json() if thread["listing_id"] == listing_id
+    ]
+    assert [thread["id"] for thread in matching_threads] == [original_thread["id"]]
+
+    reused_resp = client.post(
+        "/api/threads",
+        json={
+            "buyer_id": buyer["id"],
+            "seller_id": seller["id"],
+            "listing_id": listing_id,
+        },
+        headers=auth_headers(client, buyer["id"]),
+    )
+    assert reused_resp.status_code == 200
+    assert reused_resp.get_json()["id"] == original_thread["id"]
+
+
 def test_chat_rejects_unauthenticated_and_impersonated_requests(client):
     buyer, seller, _, thread_resp = create_chat_thread(client, "Protected chat")
     thread_id = thread_resp.get_json()["id"]

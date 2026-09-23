@@ -7,7 +7,7 @@ interface ItemDetailProps {
   onBack: () => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-  onContactSeller: () => void;
+  onContactSeller: () => Promise<void> | void;
 }
 
 const ItemDetail: React.FC<ItemDetailProps> = ({ item, onBack, isFavorite, onToggleFavorite, onContactSeller }) => {
@@ -16,6 +16,7 @@ const ItemDetail: React.FC<ItemDetailProps> = ({ item, onBack, isFavorite, onTog
     return [item.imageUrl];
   }, [item.images, item.imageUrl]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isContactingSeller, setIsContactingSeller] = useState(false);
   const hasMultiple = images.length > 1;
 
   useEffect(() => {
@@ -28,6 +29,16 @@ const ItemDetail: React.FC<ItemDetailProps> = ({ item, onBack, isFavorite, onTog
 
   const handleNext = () => {
     setActiveIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const handleContactSeller = async () => {
+    if (isContactingSeller) return;
+    setIsContactingSeller(true);
+    try {
+      await onContactSeller();
+    } finally {
+      setIsContactingSeller(false);
+    }
   };
 
   return (
@@ -137,11 +148,12 @@ const ItemDetail: React.FC<ItemDetailProps> = ({ item, onBack, isFavorite, onTog
                 </div>
             </div>
             <button 
-                onClick={onContactSeller}
-                className="w-full bg-[#57068c] text-white font-bold py-3 rounded-xl hover:bg-[#450470] transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                onClick={handleContactSeller}
+                disabled={isContactingSeller}
+                className="w-full bg-[#57068c] text-white font-bold py-3 rounded-xl hover:bg-[#450470] transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
             >
                 <MessageCircle size={20} />
-                Contact Seller
+                {isContactingSeller ? 'Opening Chat...' : 'Contact Seller'}
             </button>
           </div>
 
