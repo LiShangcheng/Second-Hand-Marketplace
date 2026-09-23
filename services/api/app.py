@@ -1,10 +1,11 @@
 import os
+import base64
+import binascii
 import hashlib
 import hmac
 import re
-import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -16,10 +17,8 @@ load_dotenv()
 
 try:
     from .db import Database
-    from .email_service import EmailSender
 except ImportError:  # pragma: no cover
     from db import Database  # type: ignore
-    from email_service import EmailSender  # type: ignore
 
 
 def _find_root() -> Path:
@@ -44,10 +43,11 @@ BROOKLYN_KEYWORDS = {
     "dibner",
     "metrotech",
     "rogers hall",
-    "lipton",
     "clark street",
     "tandon",
     "brooklyn",
+    "othmer",
+    "jersey",
 }
 
 WSQ_KEYWORDS = {
@@ -60,21 +60,64 @@ WSQ_KEYWORDS = {
     "washington mews",
     "union square",
     "astor place",
+    "lipton",
+    "tisch",
+    "courant",
+    "graduate center",
+}
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_LISTING_IMAGES = 5
+IMAGE_EXTENSIONS = {
+    "jpeg": {".jpg", ".jpeg"},
+    "png": {".png"},
+    "webp": {".webp"},
 }
 
 
-def create_app(testing: bool = False, email_sender: EmailSender | None = None):
+def _detect_image_type(data: bytes):
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _validate_image_upload(upload):
+    if not upload or not upload.filename:
+        return None, "image required", 400
+
+    safe_name = secure_filename(upload.filename)
+    extension = Path(safe_name).suffix.lower()
+    data = upload.stream.read(MAX_IMAGE_BYTES + 1)
+    upload.stream.seek(0)
+
+    if len(data) > MAX_IMAGE_BYTES:
+        return None, "each image must be 5MB or smaller", 413
+
+    image_type = _detect_image_type(data)
+    if not image_type or extension not in IMAGE_EXTENSIONS[image_type]:
+        return None, "only JPG, PNG, and WEBP images are supported", 400
+
+    expected_mime = "image/jpeg" if image_type == "jpeg" else f"image/{image_type}"
+    declared_mime = (upload.mimetype or "").lower()
+    if declared_mime and declared_mime not in (expected_mime, "application/octet-stream"):
+        return None, "image content does not match its file type", 400
+
+    return safe_name, None, None
+
+
+def create_app(testing: bool = False):
     app = Flask(__name__, static_folder=str(STATIC_DIR), template_folder=str(TEMPLATES_DIR))
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
     db = Database(MONGO_URI, MONGO_DB, use_mock=testing)
-    mailer = email_sender or EmailSender("memory" if testing else None)
     app.extensions["database"] = db
-    app.extensions["email_sender"] = mailer
-    app.config.setdefault("VERIFICATION_TTL_MINUTES", int(os.getenv("VERIFICATION_TTL_MINUTES", "10")))
-    app.config.setdefault("VERIFICATION_RESEND_SECONDS", int(os.getenv("VERIFICATION_RESEND_SECONDS", "60")))
-    app.config.setdefault("VERIFICATION_MAX_ATTEMPTS", int(os.getenv("VERIFICATION_MAX_ATTEMPTS", "5")))
     app.config.setdefault("VERIFICATION_SECRET", os.getenv("VERIFICATION_SECRET", "local-development-secret"))
+    app.config.setdefault("AUTH_TOKEN_TTL_SECONDS", int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "604800")))
+    app.config.setdefault("MAX_CONTENT_LENGTH", MAX_LISTING_IMAGES * MAX_IMAGE_BYTES + 1024 * 1024)
     if not testing:
         db.seed_if_empty()
 
@@ -95,8 +138,10 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         response.headers.setdefault("Access-Control-Allow-Credentials", "true")
         return response
 
-    # In-memory token store (users/favorites now persisted)
-    auth_tokens = {}
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        return jsonify({"error": "upload is too large"}), 413
+
     reports = []
     presence_store = {}
     communities = [
@@ -139,63 +184,47 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             return None
         return email
 
-    def _verification_hash(code: str) -> str:
+    def _issue_auth_token(user_id: str) -> str:
+        issued_at = int(datetime.now(timezone.utc).timestamp())
+        token_data = f"{user_id}:{issued_at}"
+        payload = base64.urlsafe_b64encode(token_data.encode("utf-8")).decode("ascii").rstrip("=")
         secret = app.config["VERIFICATION_SECRET"].encode("utf-8")
-        return hmac.new(secret, code.encode("utf-8"), hashlib.sha256).hexdigest()
+        signature = hmac.new(secret, payload.encode("ascii"), hashlib.sha256).hexdigest()
+        return f"{payload}.{signature}"
 
-    def _parse_utc(value):
-        if not value:
+    def _authenticated_user_id():
+        header = request.headers.get("Authorization", "")
+        if not header.startswith("Bearer "):
             return None
+        token = header.removeprefix("Bearer ").strip()
         try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except (TypeError, ValueError):
+            payload, signature = token.split(".", 1)
+            secret = app.config["VERIFICATION_SECRET"].encode("utf-8")
+            expected = hmac.new(secret, payload.encode("ascii"), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(signature, expected):
+                return None
+            padded = payload + "=" * (-len(payload) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+            user_id, issued_at_raw = decoded.rsplit(":", 1)
+            issued_at = int(issued_at_raw)
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             return None
+        now = int(datetime.now(timezone.utc).timestamp())
+        if issued_at > now + 60 or now - issued_at > app.config["AUTH_TOKEN_TTL_SECONDS"]:
+            return None
+        return user_id if db.get_user(user_id) else None
 
-    def _issue_verification_code(user, enforce_cooldown: bool = True):
-        now = datetime.now(timezone.utc)
-        sent_at = _parse_utc(user.get("verification_sent_at"))
-        cooldown = app.config["VERIFICATION_RESEND_SECONDS"]
-        if enforce_cooldown and sent_at:
-            seconds_remaining = cooldown - int((now - sent_at).total_seconds())
-            if seconds_remaining > 0:
-                return None, seconds_remaining
-
-        code = f"{secrets.randbelow(900000) + 100000:06d}"
-        expires_at = now + timedelta(minutes=app.config["VERIFICATION_TTL_MINUTES"])
-        db.update_user(
-            user["id"],
-            {
-                "verification_code_hash": _verification_hash(code),
-                "verification_expires_at": expires_at.isoformat(),
-                "verification_sent_at": now.isoformat(),
-                "verification_attempts": 0,
-            },
-        )
-        try:
-            mailer.send_verification_code(
-                user["email"], code, app.config["VERIFICATION_TTL_MINUTES"]
-            )
-        except Exception:
-            app.logger.exception("Failed to send verification email")
-            db.update_user(
-                user["id"],
-                {
-                    "verification_code_hash": None,
-                    "verification_expires_at": None,
-                    "verification_sent_at": None,
-                    "verification_attempts": 0,
-                },
-            )
-            return False, 0
-        return True, 0
+    def _require_auth(expected_user_id=None):
+        user_id = _authenticated_user_id()
+        if not user_id:
+            return None, (jsonify({"error": "authentication required"}), 401)
+        if expected_user_id is not None and str(user_id) != str(expected_user_id):
+            return None, (jsonify({"error": "forbidden"}), 403)
+        return user_id, None
 
     def _auth_payload(user):
         safe_user = db.get_user(user["id"])
-        token = f"token-{user['id']}"
-        auth_tokens[token] = user["id"]
+        token = _issue_auth_token(user["id"])
         return {"token": token, "user": safe_user}
 
     @app.route("/api/health")
@@ -220,6 +249,10 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
 
     @app.route("/api/users/<user_id>/presence", methods=["GET", "POST", "DELETE"])
     def user_presence(user_id):
+        if request.method != "GET":
+            _, auth_error = _require_auth(user_id)
+            if auth_error:
+                return auth_error
         if request.method == "POST":
             presence_store[user_id] = datetime.now(timezone.utc)
         elif request.method == "DELETE":
@@ -240,7 +273,7 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             items = db.list_items(filters)
             return jsonify(items), 200
 
-        images = []
+        image_uploads = []
         if request.form:
             form = request.form
             title = form.get("title", "").strip()
@@ -252,14 +285,7 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             course_code = form.get("course_code")
             community_id = form.get("community_id")
             if request.files:
-                for f in request.files.getlist("images"):
-                    if not f or f.filename == "":
-                        continue
-                    filename = secure_filename(f.filename)
-                    unique_name = f"{uuid.uuid4().hex}_{filename}"
-                    dest = UPLOAD_DIR / unique_name
-                    f.save(dest)
-                    images.append(f"/static/uploads/{unique_name}")
+                image_uploads = [f for f in request.files.getlist("images") if f and f.filename]
         else:
             payload = request.get_json(force=True, silent=True) or {}
             title = (payload.get("title") or payload.get("name") or "").strip()
@@ -283,6 +309,24 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         except (TypeError, ValueError):
             return jsonify({"error": "price must be a number"}), 400
 
+        images = []
+        if image_uploads:
+            _, auth_error = _require_auth(user_id)
+            if auth_error:
+                return auth_error
+            if len(image_uploads) > MAX_LISTING_IMAGES:
+                return jsonify({"error": f"up to {MAX_LISTING_IMAGES} images are allowed"}), 400
+            validated_uploads = []
+            for upload in image_uploads:
+                filename, error, status = _validate_image_upload(upload)
+                if error:
+                    return jsonify({"error": error}), status
+                validated_uploads.append((upload, filename))
+            for upload, filename in validated_uploads:
+                unique_name = f"{uuid.uuid4().hex}_{filename}"
+                upload.save(UPLOAD_DIR / unique_name)
+                images.append(f"/static/uploads/{unique_name}")
+
         user_info = db.get_user(user_id) or {
             "id": user_id,
             "nickname": "Seller",
@@ -305,7 +349,7 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
     @app.route("/api/listings/<item_id>", methods=["GET", "PUT"])
     def get_listing(item_id):
         if request.method == "PUT":
-            images = []
+            image_uploads = []
             if request.form or request.files:
                 data = request.form
                 status = data.get("status")
@@ -316,14 +360,7 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
                 description = data.get("description")
                 meetup_point = data.get("meetup_point")
                 if request.files:
-                    for f in request.files.getlist("images"):
-                        if not f or f.filename == "":
-                            continue
-                        filename = secure_filename(f.filename)
-                        unique_name = f"{uuid.uuid4().hex}_{filename}"
-                        dest = UPLOAD_DIR / unique_name
-                        f.save(dest)
-                        images.append(f"/static/uploads/{unique_name}")
+                    image_uploads = [f for f in request.files.getlist("images") if f and f.filename]
             else:
                 data = request.get_json(force=True, silent=True) or {}
                 status = data.get("status")
@@ -341,6 +378,20 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             listing_owner = str(listing.get("user_id") or listing.get("user", {}).get("id") or "")
             if listing_owner and listing_owner != user_id:
                 return jsonify({"error": "Forbidden"}), 403
+
+            images = []
+            validated_uploads = []
+            if image_uploads:
+                _, auth_error = _require_auth(user_id)
+                if auth_error:
+                    return auth_error
+                if len(image_uploads) > MAX_LISTING_IMAGES:
+                    return jsonify({"error": f"up to {MAX_LISTING_IMAGES} images are allowed"}), 400
+                for upload in image_uploads:
+                    filename, error, status = _validate_image_upload(upload)
+                    if error:
+                        return jsonify({"error": error}), status
+                    validated_uploads.append((upload, filename))
 
             updates = {}
             if status:
@@ -365,6 +416,11 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
                 updates["description"] = description
             if "meetup_point" in data:
                 updates["meetup_point"] = meetup_point
+                updates["community_id"] = _infer_community_id(meetup_point)
+            for upload, filename in validated_uploads:
+                unique_name = f"{uuid.uuid4().hex}_{filename}"
+                upload.save(UPLOAD_DIR / unique_name)
+                images.append(f"/static/uploads/{unique_name}")
             if images:
                 updates["images"] = images
 
@@ -419,87 +475,11 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             password=password,
             nickname=nickname,
             community_id=community_id,
-            email_verified=False,
+            email_verified=True,
         )
         if not created:
             return jsonify({"error": "email already registered"}), 400
-        created_private = db.get_user_by_email(email)
-        sent, _ = _issue_verification_code(created_private, enforce_cooldown=False)
-        if sent is False:
-            return jsonify({"error": "account created, but verification email could not be sent"}), 503
-        return jsonify(
-            {
-                "message": "Verification code sent",
-                "verification_required": True,
-                "email": email,
-                "user": created,
-            }
-        ), 201
-
-    @app.route("/api/auth/verify-email", methods=["POST"])
-    def verify_email():
-        payload = request.get_json(force=True, silent=True) or {}
-        email = _normalize_nyu_email(payload.get("email"))
-        code = str(payload.get("code") or "").strip()
-        if not email or not re.fullmatch(r"\d{6}", code):
-            return jsonify({"error": "valid email and 6-digit code are required"}), 400
-
-        user = db.get_user_by_email(email)
-        if not user:
-            return jsonify({"error": "invalid or expired verification code"}), 400
-        if user.get("email_verified") is True:
-            return jsonify({"error": "Email is already verified; please log in"}), 400
-
-        max_attempts = app.config["VERIFICATION_MAX_ATTEMPTS"]
-        attempts = int(user.get("verification_attempts") or 0)
-        if attempts >= max_attempts:
-            return jsonify({"error": "too many attempts; request a new code"}), 429
-
-        expires_at = _parse_utc(user.get("verification_expires_at"))
-        expected_hash = user.get("verification_code_hash") or ""
-        if not expires_at or expires_at <= datetime.now(timezone.utc) or not expected_hash:
-            return jsonify({"error": "invalid or expired verification code"}), 400
-
-        if not hmac.compare_digest(expected_hash, _verification_hash(code)):
-            attempts += 1
-            db.update_user(user["id"], {"verification_attempts": attempts})
-            if attempts >= max_attempts:
-                return jsonify({"error": "too many attempts; request a new code"}), 429
-            return jsonify({"error": "invalid or expired verification code"}), 400
-
-        db.update_user(
-            user["id"],
-            {
-                "email_verified": True,
-                "verification_code_hash": None,
-                "verification_expires_at": None,
-                "verification_sent_at": None,
-                "verification_attempts": 0,
-            },
-        )
-        verified_user = db.get_user_by_email(email)
-        return jsonify(_auth_payload(verified_user)), 200
-
-    @app.route("/api/auth/resend-verification", methods=["POST"])
-    def resend_verification():
-        payload = request.get_json(force=True, silent=True) or {}
-        email = _normalize_nyu_email(payload.get("email"))
-        if not email:
-            return jsonify({"error": "a valid @nyu.edu email is required"}), 400
-        user = db.get_user_by_email(email)
-        if not user:
-            return jsonify({"message": "If the account exists, a verification code was sent"}), 200
-        if user.get("email_verified") is True:
-            return jsonify({"message": "Email is already verified"}), 200
-
-        sent, retry_after = _issue_verification_code(user)
-        if sent is None:
-            response = jsonify({"error": "please wait before requesting another code"})
-            response.headers["Retry-After"] = str(retry_after)
-            return response, 429
-        if sent is False:
-            return jsonify({"error": "verification email could not be sent"}), 503
-        return jsonify({"message": "Verification code sent"}), 200
+        return jsonify(_auth_payload(db.get_user_by_email(email))), 201
 
     @app.route("/api/auth/login", methods=["POST"])
     def login():
@@ -508,23 +488,21 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         password = payload.get("password") or ""
         user_doc = db.get_user_by_email(email)
         if user_doc and user_doc.get("password") == password:
-            if user_doc.get("email_verified") is not True:
-                return jsonify(
-                    {
-                        "error": "Email verification required",
-                        "verification_required": True,
-                        "email": email,
-                    }
-                ), 403
             return jsonify(_auth_payload(user_doc)), 200
         return jsonify({"error": "Invalid credentials"}), 401
+
+    @app.route("/api/auth/me", methods=["GET"])
+    def current_session():
+        user_id, auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+        return jsonify(db.get_user(user_id)), 200
 
     @app.route("/api/users/<user_id>", methods=["GET", "PUT"])
     def get_user(user_id):
         if request.method == "PUT":
             payload = request.get_json(force=True, silent=True) or {}
             updates = {}
-            email_changed = False
             if "nickname" in payload:
                 updates["nickname"] = payload.get("nickname")
             if "community_id" in payload:
@@ -537,10 +515,6 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
                 if existing and str(existing.get("id")) != str(user_id):
                     return jsonify({"error": "email already registered"}), 400
                 updates["email"] = email
-                current_user = db.get_user(user_id)
-                email_changed = bool(current_user and current_user.get("email") != email)
-                if email_changed:
-                    updates["email_verified"] = False
             if "password" in payload:
                 password = payload.get("password") or ""
                 if not password:
@@ -552,11 +526,6 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
             if not updated:
                 return jsonify({"error": "Update failed"}), 400
             fresh = db.get_user(user_id)
-            if email_changed:
-                private_user = db.get_user_by_email(fresh["email"])
-                sent, _ = _issue_verification_code(private_user, enforce_cooldown=False)
-                if sent is False:
-                    return jsonify({"error": "profile updated, but verification email could not be sent"}), 503
             return jsonify(fresh), 200
 
         user = db.get_user(user_id)
@@ -566,18 +535,19 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
 
     @app.route("/api/users/<user_id>/avatar", methods=["POST"])
     def upload_avatar(user_id):
+        _, auth_error = _require_auth(user_id)
+        if auth_error:
+            return auth_error
         user = db.get_user(user_id)
         if not user:
             return jsonify({"error": "Not found"}), 404
         upload = request.files.get("avatar")
-        if upload and upload.filename:
-            filename = secure_filename(upload.filename)
-            unique_name = f"{uuid.uuid4().hex}_{filename}"
-            dest = UPLOAD_DIR / unique_name
-            upload.save(dest)
-            avatar_url = f"/static/uploads/{unique_name}"
-        else:
-            avatar_url = "https://placehold.co/120x120?text=User"
+        filename, error, status = _validate_image_upload(upload)
+        if error:
+            return jsonify({"error": error}), status
+        unique_name = f"{uuid.uuid4().hex}_{filename}"
+        upload.save(UPLOAD_DIR / unique_name)
+        avatar_url = f"/static/uploads/{unique_name}"
 
         db.update_user(user_id, {"avatar": avatar_url})
         fresh = db.get_user(user_id)
@@ -637,6 +607,10 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         seller_id = str(seller_id)
         listing_id = str(listing_id)
 
+        _, auth_error = _require_auth(buyer_id)
+        if auth_error:
+            return auth_error
+
         listing = db.get_item(listing_id)
         if not listing:
             return jsonify({"error": "listing not found"}), 404
@@ -671,6 +645,9 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
 
     @app.route("/api/threads/<user_id>", methods=["GET"])
     def get_threads(user_id):
+        _, auth_error = _require_auth(user_id)
+        if auth_error:
+            return auth_error
         user_threads = db.list_threads_for_user(user_id)
         return jsonify(user_threads), 200
 
@@ -679,14 +656,21 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         """
         Optional query param: user_id – if provided, mark messages to this user as read.
         """
+        authenticated_user_id, auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
         thread = db.get_thread(thread_id)
         if not thread:
             return jsonify({"error": "thread not found"}), 404
 
+        if authenticated_user_id not in (thread.get("buyer_id"), thread.get("seller_id")):
+            return jsonify({"error": "forbidden"}), 403
+
         user_id = request.args.get("user_id")
 
-        if user_id and user_id not in (thread.get("buyer_id"), thread.get("seller_id")):
-            return jsonify({"error": "user is not part of this thread"}), 403
+        if user_id and user_id != authenticated_user_id:
+            return jsonify({"error": "forbidden"}), 403
 
         msgs = db.list_messages_for_thread(thread_id)
 
@@ -715,6 +699,10 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
         thread_id = str(thread_id)
         sender_id = str(sender_id)
 
+        _, auth_error = _require_auth(sender_id)
+        if auth_error:
+            return auth_error
+
         thread = db.get_thread(thread_id)
         if not thread:
             return jsonify({"error": "thread not found"}), 404
@@ -737,11 +725,13 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
 
     @app.route("/api/messages/upload", methods=["POST"])
     def upload_message_image():
+        _, auth_error = _require_auth()
+        if auth_error:
+            return auth_error
         upload = request.files.get("image")
-        if not upload or not upload.filename:
-            return jsonify({"error": "image required"}), 400
-
-        filename = secure_filename(upload.filename)
+        filename, error, status = _validate_image_upload(upload)
+        if error:
+            return jsonify({"error": error}), status
         unique_name = f"{uuid.uuid4().hex}_{filename}"
         dest = UPLOAD_DIR / unique_name
         upload.save(dest)
@@ -749,6 +739,9 @@ def create_app(testing: bool = False, email_sender: EmailSender | None = None):
 
     @app.route("/api/messages/<user_id>/unread-count", methods=["GET"])
     def unread_count(user_id):
+        _, auth_error = _require_auth(user_id)
+        if auth_error:
+            return auth_error
         count = db.count_unread_messages(str(user_id))
         return jsonify({"unread": count}), 200
 

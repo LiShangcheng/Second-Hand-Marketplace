@@ -1,11 +1,16 @@
 import io
 import os
-from datetime import datetime, timedelta, timezone
+import base64
+import hashlib
+import hmac
+import uuid
+from datetime import datetime, timezone
 import pytest
 from services.api import app as app_module
 
 
 create_app = app_module.create_app
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"valid-test-image"
 
 
 @pytest.fixture()
@@ -19,11 +24,22 @@ def client(tmp_path, monkeypatch):
     os.environ.pop("USE_MOCK_DB", None)
 
 
-def latest_verification_code(client, email=None):
-    outbox = client.application.extensions["email_sender"].outbox
-    messages = [message for message in outbox if email is None or message["to"] == email]
-    assert messages, "Expected a verification email"
-    return messages[-1]["code"]
+def create_test_user(client, label):
+    return client.application.extensions["database"].create_user(
+        email=f"{label}-{uuid.uuid4().hex}@nyu.edu",
+        password="password123",
+        nickname=label,
+        email_verified=True,
+    )
+
+
+def auth_headers(client, user_id, issued_at=None):
+    issued_at = issued_at or int(datetime.now(timezone.utc).timestamp())
+    token_data = f"{user_id}:{issued_at}"
+    payload = base64.urlsafe_b64encode(token_data.encode("utf-8")).decode("ascii").rstrip("=")
+    secret = client.application.config["VERIFICATION_SECRET"].encode("utf-8")
+    signature = hmac.new(secret, payload.encode("ascii"), hashlib.sha256).hexdigest()
+    return {"Authorization": f"Bearer {payload}.{signature}"}
 
 
 def test_health(client):
@@ -82,15 +98,17 @@ def test_get_community_not_found(client):
 
 
 def test_user_presence_flow(client):
-    resp = client.get("/api/users/1/presence")
+    user = create_test_user(client, "Presence")
+    headers = auth_headers(client, user["id"])
+    resp = client.get(f"/api/users/{user['id']}/presence")
     assert resp.status_code == 200
     assert resp.get_json()["online"] is False
 
-    resp = client.post("/api/users/1/presence")
+    resp = client.post(f"/api/users/{user['id']}/presence", headers=headers)
     assert resp.status_code == 200
     assert resp.get_json()["online"] is True
 
-    resp = client.delete("/api/users/1/presence")
+    resp = client.delete(f"/api/users/{user['id']}/presence", headers=headers)
     assert resp.status_code == 200
     assert resp.get_json()["online"] is False
 
@@ -137,6 +155,95 @@ def test_listings_post_json(client):
     assert resp.status_code == 201
     data = resp.get_json()
     assert data["title"] == "Test Item"
+
+
+def test_listing_image_upload_validates_auth_type_and_count(client):
+    seller = create_test_user(client, "PhotoSeller")
+    headers = auth_headers(client, seller["id"])
+    valid_data = {
+        "title": "Photo listing",
+        "price": "20",
+        "user_id": seller["id"],
+        "images": [
+            (io.BytesIO(PNG_BYTES), "front.png", "image/png"),
+            (io.BytesIO(PNG_BYTES), "back.png", "image/png"),
+        ],
+    }
+
+    valid_resp = client.post(
+        "/api/listings",
+        data=valid_data,
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert valid_resp.status_code == 201
+    assert len(valid_resp.get_json()["images"]) == 2
+
+    unauthenticated_resp = client.post(
+        "/api/listings",
+        data={
+            "title": "Unauthorized photo listing",
+            "price": "20",
+            "user_id": seller["id"],
+            "images": (io.BytesIO(PNG_BYTES), "photo.png", "image/png"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert unauthenticated_resp.status_code == 401
+
+    too_many_resp = client.post(
+        "/api/listings",
+        data={
+            "title": "Too many photos",
+            "price": "20",
+            "user_id": seller["id"],
+            "images": [
+                (io.BytesIO(PNG_BYTES), f"photo-{index}.png", "image/png")
+                for index in range(6)
+            ],
+        },
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert too_many_resp.status_code == 400
+
+    invalid_resp = client.post(
+        "/api/listings",
+        data={
+            "title": "Invalid photo",
+            "price": "20",
+            "user_id": seller["id"],
+            "images": (io.BytesIO(b"not-an-image"), "photo.png", "image/png"),
+        },
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert invalid_resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("meetup_point", "community_id"),
+    [
+        ("Washington Square Park", "2"),
+        ("Lipton Hall", "2"),
+        ("Tandon / MetroTech", "1"),
+        ("Othmer Hall", "1"),
+        ("Jersey Street (Tandon)", "1"),
+        ("Clark Street", "1"),
+    ],
+)
+def test_listing_location_infers_consistent_community(client, meetup_point, community_id):
+    resp = client.post(
+        "/api/listings",
+        json={
+            "title": f"Item near {meetup_point}",
+            "price": 20,
+            "meetup_point": meetup_point,
+        },
+    )
+
+    assert resp.status_code == 201
+    assert resp.get_json()["community_id"] == community_id
 
 
 def test_listings_post_validation(client):
@@ -189,6 +296,28 @@ def test_update_listing_status(client):
     data = resp.get_json()
     assert data["status"] == "sold"
     assert data["sold_at"] is not None
+
+
+def test_update_listing_location_updates_community(client):
+    create_resp = client.post(
+        "/api/listings",
+        json={
+            "title": "Location Change",
+            "price": 30,
+            "user_id": "9",
+            "meetup_point": "Washington Square Park",
+        },
+    )
+    item_id = create_resp.get_json()["id"]
+
+    resp = client.put(
+        f"/api/listings/{item_id}",
+        json={"user_id": "9", "meetup_point": "Othmer Hall"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["meetup_point"] == "Othmer Hall"
+    assert resp.get_json()["community_id"] == "1"
 
 
 def test_update_listing_forbidden(client):
@@ -258,12 +387,17 @@ def test_register(client):
     )
     assert resp.status_code == 201
     data = resp.get_json()
-    assert "token" not in data
+    assert "token" in data
     assert "user" in data
-    assert data["verification_required"] is True
     assert data["user"]["email"] == "test@nyu.edu"
-    assert data["user"]["email_verified"] is False
-    assert len(latest_verification_code(client, "test@nyu.edu")) == 6
+    assert data["user"]["email_verified"] is True
+
+    session_resp = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {data['token']}"},
+    )
+    assert session_resp.status_code == 200
+    assert session_resp.get_json()["email"] == "test@nyu.edu"
 
 
 def test_register_validation(client):
@@ -283,115 +417,6 @@ def test_register_validation(client):
     assert resp.status_code == 400
 
 
-def test_verify_email(client):
-    email = "verify@nyu.edu"
-    client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
-    )
-    code = latest_verification_code(client, email)
-
-    resp = client.post("/api/auth/verify-email", json={"email": email, "code": code})
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert "token" in data
-    assert data["user"]["email_verified"] is True
-    assert "verification_code_hash" not in data["user"]
-
-    repeat_resp = client.post(
-        "/api/auth/verify-email",
-        json={"email": email, "code": "000000"},
-    )
-    assert repeat_resp.status_code == 400
-    assert "token" not in repeat_resp.get_json()
-
-
-def test_verify_email_rejects_invalid_and_expired_codes(client):
-    email = "invalid-code@nyu.edu"
-    register_resp = client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
-    )
-    user_id = register_resp.get_json()["user"]["id"]
-
-    resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
-    assert resp.status_code == 400
-
-    database = client.application.extensions["database"]
-    database.update_user(
-        user_id,
-        {"verification_expires_at": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()},
-    )
-    resp = client.post(
-        "/api/auth/verify-email",
-        json={"email": email, "code": latest_verification_code(client, email)},
-    )
-    assert resp.status_code == 400
-
-
-def test_verify_email_limits_attempts(client):
-    email = "attempts@nyu.edu"
-    client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
-    )
-    for _ in range(4):
-        resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
-        assert resp.status_code == 400
-    resp = client.post("/api/auth/verify-email", json={"email": email, "code": "000000"})
-    assert resp.status_code == 429
-
-
-def test_resend_verification_rate_limit(client):
-    email = "resend@nyu.edu"
-    client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "VerifyUser"},
-    )
-    resp = client.post("/api/auth/resend-verification", json={"email": email})
-    assert resp.status_code == 429
-    assert "Retry-After" in resp.headers
-
-    client.application.config["VERIFICATION_RESEND_SECONDS"] = 0
-    resp = client.post("/api/auth/resend-verification", json={"email": email})
-    assert resp.status_code == 200
-    assert len(client.application.extensions["email_sender"].outbox) == 2
-
-
-def test_unverified_user_cannot_login(client):
-    email = "pending@nyu.edu"
-    client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "PendingUser"},
-    )
-    resp = client.post("/api/auth/login", json={"email": email, "password": "password123"})
-    assert resp.status_code == 403
-    assert resp.get_json()["verification_required"] is True
-
-
-def test_registration_email_failure_can_be_retried():
-    class FailingSender:
-        outbox = []
-
-        def send_verification_code(self, *_args):
-            raise RuntimeError("mail unavailable")
-
-    app = create_app(testing=True, email_sender=FailingSender())
-    app.config.update({"TESTING": True})
-    client = app.test_client()
-    email = "mail-failure@nyu.edu"
-
-    resp = client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "password123", "nickname": "MailFailure"},
-    )
-    assert resp.status_code == 503
-
-    user = app.extensions["database"].get_user_by_email(email)
-    assert user["verification_sent_at"] is None
-    assert user["verification_code_hash"] is None
-
-
 def test_login(client):
     client.post(
         "/api/auth/register",
@@ -401,13 +426,6 @@ def test_login(client):
             "nickname": "LoginUser",
         },
     )
-    code = latest_verification_code(client, "login@nyu.edu")
-    verify_resp = client.post(
-        "/api/auth/verify-email",
-        json={"email": "login@nyu.edu", "code": code},
-    )
-    assert verify_resp.status_code == 200
-
     resp = client.post(
         "/api/auth/login",
         json={
@@ -430,6 +448,24 @@ def test_login_invalid_credentials(client):
         },
     )
     assert resp.status_code == 401
+
+
+def test_current_session_requires_valid_token(client):
+    user = create_test_user(client, "SessionUser")
+
+    missing_resp = client.get("/api/auth/me")
+    assert missing_resp.status_code == 401
+
+    invalid_resp = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid"})
+    assert invalid_resp.status_code == 401
+
+    expired_at = int(datetime.now(timezone.utc).timestamp()) - client.application.config["AUTH_TOKEN_TTL_SECONDS"] - 1
+    expired_resp = client.get("/api/auth/me", headers=auth_headers(client, user["id"], expired_at))
+    assert expired_resp.status_code == 401
+
+    valid_resp = client.get("/api/auth/me", headers=auth_headers(client, user["id"]))
+    assert valid_resp.status_code == 200
+    assert valid_resp.get_json()["id"] == user["id"]
 
 
 def test_get_user(client):
@@ -466,7 +502,7 @@ def test_update_user(client):
     assert data["nickname"] == "NewName"
 
 
-def test_update_user_email_requires_reverification(client):
+def test_update_user_email_without_reverification(client):
     original_email = "change-email@nyu.edu"
     new_email = "changed-email@nyu.edu"
     register_resp = client.post(
@@ -478,22 +514,11 @@ def test_update_user_email_requires_reverification(client):
         },
     )
     user_id = register_resp.get_json()["user"]["id"]
-    client.post(
-        "/api/auth/verify-email",
-        json={"email": original_email, "code": latest_verification_code(client, original_email)},
-    )
 
     resp = client.put(f"/api/users/{user_id}", json={"email": new_email})
     assert resp.status_code == 200
     assert resp.get_json()["email"] == new_email
-    assert resp.get_json()["email_verified"] is False
-
-    verify_resp = client.post(
-        "/api/auth/verify-email",
-        json={"email": new_email, "code": latest_verification_code(client, new_email)},
-    )
-    assert verify_resp.status_code == 200
-    assert verify_resp.get_json()["user"]["email_verified"] is True
+    assert resp.get_json()["email_verified"] is True
 
 
 def test_update_user_validation(client):
@@ -530,11 +555,9 @@ def test_upload_avatar(client):
     )
     user_id = register_resp.get_json()["user"]["id"]
 
-    resp = client.post(f"/api/users/{user_id}/avatar")
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert "user" in data
-    assert "avatar" in data["user"]
+    resp = client.post(f"/api/users/{user_id}/avatar", headers=auth_headers(client, user_id))
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "image required"
 
 
 def test_upload_avatar_with_file(client):
@@ -548,15 +571,31 @@ def test_upload_avatar_with_file(client):
     )
     user_id = register_resp.get_json()["user"]["id"]
 
-    data = {"avatar": (io.BytesIO(b"fake-image"), "avatar.png")}
+    data = {"avatar": (io.BytesIO(PNG_BYTES), "avatar.png", "image/png")}
     resp = client.post(
         f"/api/users/{user_id}/avatar",
         data=data,
+        headers=auth_headers(client, user_id),
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
     payload = resp.get_json()
     assert payload["user"]["avatar"].startswith("/static/uploads/")
+
+
+def test_upload_avatar_requires_matching_user(client):
+    owner = create_test_user(client, "AvatarOwner")
+    attacker = create_test_user(client, "AvatarAttacker")
+    data = {"avatar": (io.BytesIO(PNG_BYTES), "avatar.png", "image/png")}
+
+    resp = client.post(
+        f"/api/users/{owner['id']}/avatar",
+        data=data,
+        headers=auth_headers(client, attacker["id"]),
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 403
 
 
 def test_add_favorite(client):
@@ -630,34 +669,56 @@ def test_get_user_favorites(client):
     assert "favorite_ids" in data
 
 
-def test_create_thread(client):
-    # Create a listing owned by seller_id "2"
+def create_chat_thread(client, title="Chat listing"):
+    buyer = create_test_user(client, "Buyer")
+    seller = create_test_user(client, "Seller")
     listing_resp = client.post(
         "/api/listings",
         json={
-            "title": "Listing for thread",
+            "title": title,
             "price": 10.0,
-            "user_id": "2",
+            "user_id": seller["id"],
         },
     )
-    assert listing_resp.status_code == 201
-    listing = listing_resp.get_json()
-    listing_id = listing["id"]
-
-    resp = client.post(
+    thread_resp = client.post(
         "/api/threads",
         json={
-            "buyer_id": "1",
-            "seller_id": "2",
-            "listing_id": listing_id,
+            "buyer_id": buyer["id"],
+            "seller_id": seller["id"],
+            "listing_id": listing_resp.get_json()["id"],
         },
+        headers=auth_headers(client, buyer["id"]),
     )
+    return buyer, seller, listing_resp, thread_resp
+
+
+def test_create_thread(client):
+    buyer, seller, listing_resp, resp = create_chat_thread(client, "Listing for thread")
     assert resp.status_code == 201
     data = resp.get_json()
     assert "id" in data
-    assert data["buyer_id"] == "1"
-    assert data["seller_id"] == "2"
-    assert data["listing_id"] == listing_id
+    assert data["buyer_id"] == buyer["id"]
+    assert data["seller_id"] == seller["id"]
+    assert data["listing_id"] == listing_resp.get_json()["id"]
+
+
+def test_chat_rejects_unauthenticated_and_impersonated_requests(client):
+    buyer, seller, _, thread_resp = create_chat_thread(client, "Protected chat")
+    thread_id = thread_resp.get_json()["id"]
+
+    unauthenticated = client.get(f"/api/threads/{thread_id}/messages")
+    assert unauthenticated.status_code == 401
+
+    impersonated = client.post(
+        "/api/messages",
+        json={
+            "thread_id": thread_id,
+            "sender_id": seller["id"],
+            "content": "Forged sender",
+        },
+        headers=auth_headers(client, buyer["id"]),
+    )
+    assert impersonated.status_code == 403
 
 
 def test_create_thread_validation(client):
@@ -668,26 +729,9 @@ def test_create_thread_validation(client):
 
 
 def test_get_threads(client):
-    listing_resp = client.post(
-        "/api/listings",
-        json={
-            "title": "Listing for thread list",
-            "price": 12.0,
-            "user_id": "2",
-        },
-    )
-    listing_id = listing_resp.get_json()["id"]
+    buyer, _, _, _ = create_chat_thread(client, "Listing for thread list")
 
-    client.post(
-        "/api/threads",
-        json={
-            "buyer_id": "1",
-            "seller_id": "2",
-            "listing_id": listing_id,
-        },
-    )
-
-    resp = client.get("/api/threads/1")
+    resp = client.get(f"/api/threads/{buyer['id']}", headers=auth_headers(client, buyer["id"]))
     assert resp.status_code == 200
     data = resp.get_json()
     assert isinstance(data, list)
@@ -695,24 +739,7 @@ def test_get_threads(client):
 
 
 def test_send_message(client):
-    listing_resp = client.post(
-        "/api/listings",
-        json={
-            "title": "Listing for message",
-            "price": 18.0,
-            "user_id": "2",
-        },
-    )
-    listing_id = listing_resp.get_json()["id"]
-
-    thread_resp = client.post(
-        "/api/threads",
-        json={
-            "buyer_id": "1",
-            "seller_id": "2",
-            "listing_id": listing_id,
-        },
-    )
+    buyer, _, _, thread_resp = create_chat_thread(client, "Listing for message")
     assert thread_resp.status_code == 201
     thread_id = thread_resp.get_json()["id"]
 
@@ -720,9 +747,10 @@ def test_send_message(client):
         "/api/messages",
         json={
             "thread_id": thread_id,
-            "sender_id": "1",
+            "sender_id": buyer["id"],
             "content": "Hello",
         },
+        headers=auth_headers(client, buyer["id"]),
     )
     assert resp.status_code == 201
     data = resp.get_json()
@@ -736,32 +764,17 @@ def test_send_message_validation(client):
 
 
 def test_send_message_thread_not_found(client):
+    user = create_test_user(client, "MissingThread")
     resp = client.post(
         "/api/messages",
-        json={"thread_id": "999999999999999999999999", "sender_id": "1", "content": "Hi"},
+        json={"thread_id": "999999999999999999999999", "sender_id": user["id"], "content": "Hi"},
+        headers=auth_headers(client, user["id"]),
     )
     assert resp.status_code == 404
 
 
 def test_get_messages(client):
-    listing_resp = client.post(
-        "/api/listings",
-        json={
-            "title": "Listing for messages list",
-            "price": 22.0,
-            "user_id": "2",
-        },
-    )
-    listing_id = listing_resp.get_json()["id"]
-
-    thread_resp = client.post(
-        "/api/threads",
-        json={
-            "buyer_id": "1",
-            "seller_id": "2",
-            "listing_id": listing_id,
-        },
-    )
+    buyer, _, _, thread_resp = create_chat_thread(client, "Listing for messages list")
     assert thread_resp.status_code == 201
     thread_id = thread_resp.get_json()["id"]
 
@@ -769,12 +782,16 @@ def test_get_messages(client):
         "/api/messages",
         json={
             "thread_id": thread_id,
-            "sender_id": "1",
+            "sender_id": buyer["id"],
             "content": "Test message",
         },
+        headers=auth_headers(client, buyer["id"]),
     )
 
-    resp = client.get(f"/api/threads/{thread_id}/messages")
+    resp = client.get(
+        f"/api/threads/{thread_id}/messages",
+        headers=auth_headers(client, buyer["id"]),
+    )
     assert resp.status_code == 200
     data = resp.get_json()
     assert isinstance(data, list)
@@ -782,45 +799,75 @@ def test_get_messages(client):
 
 
 def test_get_messages_forbidden_user(client):
-    listing_resp = client.post(
-        "/api/listings",
-        json={
-            "title": "Listing for messages forbidden",
-            "price": 22.0,
-            "user_id": "2",
-        },
-    )
-    listing_id = listing_resp.get_json()["id"]
-
-    thread_resp = client.post(
-        "/api/threads",
-        json={
-            "buyer_id": "1",
-            "seller_id": "2",
-            "listing_id": listing_id,
-        },
-    )
+    _, _, _, thread_resp = create_chat_thread(client, "Listing for messages forbidden")
     thread_id = thread_resp.get_json()["id"]
+    outsider = create_test_user(client, "Outsider")
 
-    resp = client.get(f"/api/threads/{thread_id}/messages?user_id=3")
+    resp = client.get(
+        f"/api/threads/{thread_id}/messages?user_id={outsider['id']}",
+        headers=auth_headers(client, outsider["id"]),
+    )
     assert resp.status_code == 403
 
 
 def test_upload_message_image(client):
-    data = {"image": (io.BytesIO(b"fake-image"), "test.png")}
-    resp = client.post("/api/messages/upload", data=data, content_type="multipart/form-data")
+    user = create_test_user(client, "ImageSender")
+    data = {"image": (io.BytesIO(PNG_BYTES), "test.png", "image/png")}
+    resp = client.post(
+        "/api/messages/upload",
+        data=data,
+        headers=auth_headers(client, user["id"]),
+        content_type="multipart/form-data",
+    )
     assert resp.status_code == 201
     payload = resp.get_json()
     assert payload["url"].startswith("/static/uploads/")
 
 
 def test_upload_message_image_missing_file(client):
-    resp = client.post("/api/messages/upload", data={}, content_type="multipart/form-data")
+    user = create_test_user(client, "MissingImage")
+    resp = client.post(
+        "/api/messages/upload",
+        data={},
+        headers=auth_headers(client, user["id"]),
+        content_type="multipart/form-data",
+    )
     assert resp.status_code == 400
 
 
+def test_upload_message_image_rejects_invalid_and_oversized_files(client):
+    user = create_test_user(client, "InvalidImage")
+    headers = auth_headers(client, user["id"])
+
+    invalid_resp = client.post(
+        "/api/messages/upload",
+        data={"image": (io.BytesIO(b"not-an-image"), "fake.png", "image/png")},
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert invalid_resp.status_code == 400
+
+    oversized_resp = client.post(
+        "/api/messages/upload",
+        data={
+            "image": (
+                io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"x" * app_module.MAX_IMAGE_BYTES),
+                "large.png",
+                "image/png",
+            )
+        },
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert oversized_resp.status_code == 413
+
+
 def test_unread_count(client):
-    resp = client.get("/api/messages/1/unread-count")
+    user = create_test_user(client, "Unread")
+    resp = client.get(
+        f"/api/messages/{user['id']}/unread-count",
+        headers=auth_headers(client, user["id"]),
+    )
     assert resp.status_code == 200
     data = resp.get_json()
     assert "unread" in data

@@ -19,6 +19,9 @@ import {
   resolveAssetUrl,
   uploadMessageImage,
 } from '../api';
+import { IMAGE_ACCEPT, validateImageFile } from '../imageValidation';
+
+const CHAT_POLL_INTERVAL_MS = 5000;
 
 interface MessagesProps {
   onBack: () => void;
@@ -79,6 +82,9 @@ const Messages: React.FC<MessagesProps> = ({
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
   const [threadMeta, setThreadMeta] = useState<Record<string, { unread: number; last?: ApiMessage }>>({});
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [otherPresence, setOtherPresence] = useState<ApiPresence | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -88,10 +94,27 @@ const Messages: React.FC<MessagesProps> = ({
 
   useEffect(() => {
     if (!currentUser) return;
+    let cancelled = false;
+    const loadThreads = async () => {
+      try {
+        const data = await onFetchThreads();
+        if (!cancelled) {
+          setThreads(data);
+          setSyncError(null);
+        }
+      } catch (err: any) {
+        if (!cancelled) setSyncError(err?.message || 'Could not refresh conversations.');
+      } finally {
+        if (!cancelled) setLoadingThreads(false);
+      }
+    };
     setLoadingThreads(true);
-    onFetchThreads()
-      .then(setThreads)
-      .finally(() => setLoadingThreads(false));
+    void loadThreads();
+    const interval = setInterval(loadThreads, CHAT_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [currentUser, onFetchThreads]);
 
   useEffect(() => {
@@ -177,14 +200,29 @@ const Messages: React.FC<MessagesProps> = ({
 
   useEffect(() => {
     if (!activeChat) return;
-    onFetchMessages(activeChat).then((data) => {
-      setMessages((prev) => ({ ...prev, [activeChat]: data }));
-      onUnreadUpdate();
-      setThreadMeta((prev) => ({
-        ...prev,
-        [activeChat]: { unread: 0, last: data[data.length - 1] },
-      }));
-    });
+    let cancelled = false;
+    const loadMessages = async () => {
+      try {
+        const data = await onFetchMessages(activeChat);
+        if (cancelled) return;
+        setSyncError(null);
+        setMessages((prev) => ({ ...prev, [activeChat]: data }));
+        await onUnreadUpdate();
+        if (cancelled) return;
+        setThreadMeta((prev) => ({
+          ...prev,
+          [activeChat]: { unread: 0, last: data[data.length - 1] },
+        }));
+      } catch (err: any) {
+        if (!cancelled) setSyncError(err?.message || 'Could not refresh messages.');
+      }
+    };
+    void loadMessages();
+    const interval = setInterval(loadMessages, CHAT_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [activeChat, onFetchMessages, onUnreadUpdate]);
 
   const activeThread = threads.find((thread) => thread.id === activeChat) || pendingThread || null;
@@ -251,17 +289,25 @@ const Messages: React.FC<MessagesProps> = ({
   };
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !activeChat || !currentUser) return;
+    if (!inputText.trim() || !activeChat || !currentUser || isSending) return;
     const content = inputText.trim();
-    setInputText('');
-    await onSendMessage(activeChat, content);
-    const updated = await onFetchMessages(activeChat);
-    setMessages((prev) => ({ ...prev, [activeChat]: updated }));
-    await onUnreadUpdate();
-    setThreadMeta((prev) => ({
-      ...prev,
-      [activeChat]: { unread: 0, last: updated[updated.length - 1] },
-    }));
+    setChatError(null);
+    setIsSending(true);
+    try {
+      await onSendMessage(activeChat, content);
+      setInputText('');
+      const updated = await onFetchMessages(activeChat);
+      setMessages((prev) => ({ ...prev, [activeChat]: updated }));
+      await onUnreadUpdate();
+      setThreadMeta((prev) => ({
+        ...prev,
+        [activeChat]: { unread: 0, last: updated[updated.length - 1] },
+      }));
+    } catch (err: any) {
+      setChatError(err?.message || 'Message could not be sent. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleImagePick = () => {
@@ -271,6 +317,13 @@ const Messages: React.FC<MessagesProps> = ({
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeChat || !currentUser) return;
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setChatError(validationError);
+      e.target.value = '';
+      return;
+    }
+    setChatError(null);
     setIsUploadingImage(true);
     try {
       const { url } = await uploadMessageImage(file);
@@ -282,6 +335,8 @@ const Messages: React.FC<MessagesProps> = ({
         ...prev,
         [activeChat]: { unread: 0, last: updated[updated.length - 1] },
       }));
+    } catch (err: any) {
+      setChatError(err?.message || 'Image could not be sent. Please try again.');
     } finally {
       setIsUploadingImage(false);
       e.target.value = '';
@@ -447,11 +502,16 @@ const Messages: React.FC<MessagesProps> = ({
 
               {/* Input Area */}
               <div className="p-4 bg-white border-t border-gray-100">
+                {(chatError || syncError) && (
+                  <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2" role="alert">
+                    {chatError || syncError}
+                  </div>
+                )}
                 <div className="flex items-end gap-3 w-full pt-1.5">
                   <div className="flex items-center gap-1 pb-1">
                     <button
                       onClick={handleImagePick}
-                      disabled={!activeChat || isUploadingImage}
+                      disabled={!activeChat || isUploadingImage || isSending}
                       className="p-2.5 text-gray-400 hover:text-[#57068c] hover:bg-purple-50 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Upload image"
                     >
@@ -460,7 +520,7 @@ const Messages: React.FC<MessagesProps> = ({
                     <input
                       ref={imageInputRef}
                       type="file"
-                      accept="image/*"
+                      accept={IMAGE_ACCEPT}
                       className="hidden"
                       onChange={handleImageChange}
                     />
@@ -480,9 +540,9 @@ const Messages: React.FC<MessagesProps> = ({
 
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputText.trim()}
+                    disabled={!inputText.trim() || isSending || isUploadingImage}
                     className={`p-3.5 rounded-full transition-all duration-200 shadow-sm flex items-center justify-center pb-3.5 ${
-                      inputText.trim()
+                      inputText.trim() && !isSending && !isUploadingImage
                         ? 'bg-[#57068c] text-white hover:bg-[#450470] shadow-purple-200 hover:scale-105 active:scale-95'
                         : 'bg-gray-100 text-gray-300 cursor-not-allowed'
                     }`}

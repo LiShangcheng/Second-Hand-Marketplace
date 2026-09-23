@@ -5,12 +5,11 @@ import FilterBar from './components/FilterBar';
 import ItemCard from './components/ItemCard';
 import PostItemModal from './components/PostItemModal';
 import AuthModal from './components/AuthModal';
-import EmailVerificationModal from './components/EmailVerificationModal';
 import ItemDetail from './components/ItemDetail';
 import Profile from './components/Profile';
 import Messages from './components/Messages';
 import { Category, Item, AuthState, ViewState, User } from './types';
-import { CAMPUS_LOCATIONS } from './constants';
+import { CAMPUS_LOCATIONS, campusForLocation } from './constants';
 import {
   fetchListings,
   toItem,
@@ -32,12 +31,10 @@ import {
   fetchUnreadCount,
   updateUser,
   uploadAvatar,
-  fetchUser,
+  fetchCurrentUser,
   toUser,
   ApiThread,
   clearPresence,
-  verifyEmail,
-  resendVerification,
 } from './api';
 
 const USER_STORAGE_KEY = 'nyu_swap_user';
@@ -57,7 +54,6 @@ const App: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [auth, setAuth] = useState<AuthState>({ isOpen: false, mode: 'login' });
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
@@ -76,12 +72,6 @@ const App: React.FC = () => {
 
   // Filter Logic
   const filteredItems = useMemo(() => {
-    const brooklynHits = ['tandon', 'metrotech', 'dibner', 'rogers', 'brooklyn', 'othmer', 'jersey'];
-    const campusForLocation = (value: string) => {
-      const lower = value.toLowerCase();
-      if (brooklynHits.some((hit) => lower.includes(hit))) return 'Brooklyn Campus';
-      return 'Washington Square Campus';
-    };
     const isRecentSold = (item: Item) => {
       if (item.status !== 'sold') return false;
       const source = item.soldAt || item.createdAt;
@@ -142,6 +132,27 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleFetchThreads = useCallback(async () => {
+    if (!currentUser) return [];
+    return fetchThreads(currentUser.id);
+  }, [currentUser]);
+
+  const handleFetchMessages = useCallback(async (threadId: string) => {
+    if (!currentUser) return [];
+    return fetchMessages(threadId, currentUser.id);
+  }, [currentUser]);
+
+  const handleSendMessage = useCallback(async (threadId: string, content: string) => {
+    if (!currentUser) return;
+    await sendMessage({ thread_id: threadId, sender_id: currentUser.id, content });
+  }, [currentUser]);
+
+  const handleUnreadUpdate = useCallback(async () => {
+    if (!currentUser) return;
+    const count = await fetchUnreadCount(currentUser.id);
+    setUnreadCount(count);
+  }, [currentUser]);
+
   useEffect(() => {
     loadListings();
   }, [loadListings]);
@@ -157,7 +168,8 @@ const App: React.FC = () => {
         if (!raw) return;
         const parsed = JSON.parse(raw) as User;
         if (!parsed?.id) return;
-        const fresh = await fetchUser(parsed.id);
+        const fresh = await fetchCurrentUser();
+        if (fresh.id !== parsed.id) throw new Error('Stored session does not match the authenticated user.');
         setCurrentUser(toUser(fresh));
       } catch {
         localStorage.removeItem(USER_STORAGE_KEY);
@@ -243,23 +255,10 @@ const App: React.FC = () => {
                     activeThreadId={activeThreadId}
                     onThreadOpen={(threadId) => setActiveThreadId(threadId)}
                     pendingThread={pendingThread}
-                    onFetchThreads={async () => {
-                        if (!currentUser) return [];
-                        return fetchThreads(currentUser.id);
-                    }}
-                    onFetchMessages={async (threadId) => {
-                        if (!currentUser) return [];
-                        return fetchMessages(threadId, currentUser.id);
-                    }}
-                    onSendMessage={async (threadId, content) => {
-                        if (!currentUser) return;
-                        await sendMessage({ thread_id: threadId, sender_id: currentUser.id, content });
-                    }}
-                    onUnreadUpdate={async () => {
-                        if (!currentUser) return;
-                        const count = await fetchUnreadCount(currentUser.id);
-                        setUnreadCount(count);
-                    }}
+                    onFetchThreads={handleFetchThreads}
+                    onFetchMessages={handleFetchMessages}
+                    onSendMessage={handleSendMessage}
+                    onUnreadUpdate={handleUnreadUpdate}
                 />
             );
 
@@ -336,9 +335,6 @@ const App: React.FC = () => {
                             email,
                             password,
                         });
-                        if (updated.email_verified === false && updated.email !== currentUser.email) {
-                            setVerificationEmail(updated.email);
-                        }
                         setCurrentUser((prev) =>
                             prev
                                 ? {
@@ -567,45 +563,21 @@ const App: React.FC = () => {
         auth={auth} 
         onClose={() => setAuth(prev => ({ ...prev, isOpen: false }))}
         onLogin={async ({ email, password, name }) => {
-            const isRegister = auth.mode === 'register';
-            if (isRegister) {
-              const response = await registerUser({ email, password, nickname: name });
-              setVerificationEmail(response.email);
-              setAuth(prev => ({ ...prev, isOpen: false }));
-              return;
-            }
-            try {
-              const response = await loginUser({ email, password });
-              localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
-              setCurrentUser(toUser(response.user));
-              setAuth(prev => ({ ...prev, isOpen: false }));
-            } catch (err: any) {
-              if (err?.status === 403) {
-                setVerificationEmail(email.trim().toLowerCase());
-                setAuth(prev => ({ ...prev, isOpen: false }));
-                return;
-              }
-              throw err;
-            }
+          const isRegister = auth.mode === 'register';
+          if (isRegister) {
+            const response = await registerUser({ email, password, nickname: name });
+            localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+            setCurrentUser(toUser(response.user));
+            setAuth(prev => ({ ...prev, isOpen: false }));
+            return;
+          }
+          const response = await loginUser({ email, password });
+          localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+          setCurrentUser(toUser(response.user));
+          setAuth(prev => ({ ...prev, isOpen: false }));
         }}
         onChangeMode={(mode) => setAuth(prev => ({ ...prev, mode }))}
       />
-
-      {verificationEmail && (
-        <EmailVerificationModal
-          email={verificationEmail}
-          onClose={() => setVerificationEmail(null)}
-          onVerify={async (code) => {
-            const response = await verifyEmail({ email: verificationEmail, code });
-            localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
-            setCurrentUser(toUser(response.user));
-            setVerificationEmail(null);
-          }}
-          onResend={async () => {
-            await resendVerification(verificationEmail);
-          }}
-        />
-      )}
     </div>
   );
 };

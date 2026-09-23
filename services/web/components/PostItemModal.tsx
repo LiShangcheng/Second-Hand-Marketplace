@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, DollarSign, MapPin, Tag, Image as ImageIcon } from 'lucide-react';
 import { CATEGORIES, MEETUP_LOCATIONS } from '../constants';
+import { IMAGE_ACCEPT, MAX_LISTING_IMAGES, validateListingImages } from '../imageValidation';
 
 interface PostItemModalProps {
   isOpen: boolean;
@@ -82,14 +83,23 @@ const PostItemModal: React.FC<PostItemModalProps> = ({
     }
   };
 
+  const addFiles = (selected: File[]) => {
+    if (selected.length === 0) return;
+    const validationError = validateListingImages(files.length, selected);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    setFiles((prev) => [...prev, ...selected]);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     const dropped = Array.from(e.dataTransfer.files || []);
-    if (dropped.length > 0) {
-      setFiles((prev) => [...prev, ...dropped]);
-    }
+    addFiles(dropped);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -176,18 +186,16 @@ const PostItemModal: React.FC<PostItemModalProps> = ({
                         <p className="font-bold text-gray-900 text-lg">{mode === 'edit' ? 'Replace photos' : 'Drag & drop photos here'}</p>
                         <p className="text-sm text-gray-500 mt-1">or click to browse from your device</p>
                     </div>
-                    <p className="text-xs text-gray-400">Supports JPG, PNG, WEBP (Max 5MB)</p>
+                    <p className="text-xs text-gray-400">JPG, PNG, WEBP · Max 5MB each · Up to {MAX_LISTING_IMAGES}</p>
                     <input
                         ref={fileInputRef}
                         type="file"
                         className="hidden"
                         multiple
-                        accept="image/*"
+                        accept={IMAGE_ACCEPT}
                         onChange={(e) => {
                           const selected = Array.from(e.target.files || []);
-                          if (selected.length > 0) {
-                            setFiles((prev) => [...prev, ...selected]);
-                          }
+                          addFiles(selected);
                           e.target.value = '';
                         }}
                     />

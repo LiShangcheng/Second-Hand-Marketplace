@@ -1,6 +1,9 @@
 services:
   web:
-    build: ./services/web
+    build:
+      context: ./services/web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5002}
     ports:
       - "3000:3000"
     depends_on:
@@ -13,17 +16,8 @@ services:
       - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
       - MONGO_DB=${MONGO_DB:-marketplace}
       - PORT=5001
-      - MAIL_MODE=${MAIL_MODE:-console}
       - VERIFICATION_SECRET=${VERIFICATION_SECRET:-local-development-secret}
-      - VERIFICATION_TTL_MINUTES=${VERIFICATION_TTL_MINUTES:-10}
-      - VERIFICATION_RESEND_SECONDS=${VERIFICATION_RESEND_SECONDS:-60}
-      - VERIFICATION_MAX_ATTEMPTS=${VERIFICATION_MAX_ATTEMPTS:-5}
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USERNAME=${SMTP_USERNAME:-}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - SMTP_FROM=${SMTP_FROM:-}
-      - SMTP_USE_TLS=${SMTP_USE_TLS:-1}
+      - AUTH_TOKEN_TTL_SECONDS=${AUTH_TOKEN_TTL_SECONDS:-604800}
     volumes:
       - ./services/api/static:/app/services/api/static
     ports:

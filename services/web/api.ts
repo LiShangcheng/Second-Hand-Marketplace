@@ -1,8 +1,15 @@
 import { Category, Item, User } from './types';
+import { campusForLocation } from './constants';
 
 const viteEnv = (import.meta as any).env || {};
 const configuredApiBaseUrl = String(viteEnv.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const API_BASE_URL = configuredApiBaseUrl || (viteEnv.DEV ? 'http://localhost:5002' : window.location.origin);
+const TOKEN_STORAGE_KEY = 'nyu_swap_token';
+
+const authHeaders = (): Record<string, string> => {
+  const token = typeof window !== 'undefined' ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export interface ApiUser {
   id: string;
@@ -69,11 +76,12 @@ class ApiError extends Error {
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...(options.headers || {}),
     },
-    ...options,
   });
 
   if (!response.ok) {
@@ -110,15 +118,6 @@ export const resolveAssetUrl = (path?: string) => {
   if (path.startsWith('http')) return path;
   if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
   return path;
-};
-
-const normalizeCampus = (raw?: string): 'Washington Square Campus' | 'Brooklyn Campus' => {
-  const value = (raw || '').toLowerCase();
-  const brooklynHits = ['tandon', 'metrotech', 'dibner', 'rogers', 'brooklyn', 'othmer', 'jersey'];
-  if (brooklynHits.some((hit) => value.includes(hit))) {
-    return 'Brooklyn Campus';
-  }
-  return 'Washington Square Campus';
 };
 
 const ensureUtc = (iso?: string) => {
@@ -159,7 +158,7 @@ export const toItem = (listing: ApiListing): Item => {
     description: listing.description || '',
     imageUrl: resolvedImages[0] || 'https://picsum.photos/id/24/400/300',
     images: resolvedImages,
-    location: listing.meetup_point || normalizeCampus(listing.meetup_point),
+    location: listing.meetup_point || campusForLocation(listing.meetup_point || ''),
     postedAt: formatTimeAgo(listing.created_at),
     createdAt: listing.created_at ? ensureUtc(listing.created_at) : undefined,
     soldAt: listing.sold_at ? ensureUtc(listing.sold_at) : null,
@@ -240,6 +239,7 @@ export const createListingWithImages = async (payload: {
 
   const response = await fetch(`${API_BASE_URL}/api/listings`, {
     method: 'POST',
+    headers: authHeaders(),
     body: formData,
   });
 
@@ -314,6 +314,7 @@ export const updateListingWithImages = async (payload: {
 
   const response = await fetch(`${API_BASE_URL}/api/listings/${payload.listingId}`, {
     method: 'PUT',
+    headers: authHeaders(),
     body: formData,
   });
 
@@ -337,32 +338,10 @@ export const registerUser = async (payload: {
   password: string;
   nickname: string;
   community_id?: string;
-}): Promise<{
-  message: string;
-  verification_required: true;
-  email: string;
-  user: ApiUser;
-}> => {
-  return request('/api/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-};
-
-export const verifyEmail = async (payload: {
-  email: string;
-  code: string;
 }): Promise<{ token: string; user: ApiUser }> => {
-  return request<{ token: string; user: ApiUser }>('/api/auth/verify-email', {
+  return request<{ token: string; user: ApiUser }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
-};
-
-export const resendVerification = async (email: string): Promise<{ message: string }> => {
-  return request<{ message: string }>('/api/auth/resend-verification', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
   });
 };
 
@@ -378,6 +357,11 @@ export const loginUser = async (payload: {
 
 export const fetchUser = async (userId: string): Promise<ApiUser> => {
   const user = await request<ApiUser>(`/api/users/${userId}`);
+  return { ...user, avatar: resolveAssetUrl(user.avatar) || DEFAULT_AVATAR };
+};
+
+export const fetchCurrentUser = async (): Promise<ApiUser> => {
+  const user = await request<ApiUser>('/api/auth/me');
   return { ...user, avatar: resolveAssetUrl(user.avatar) || DEFAULT_AVATAR };
 };
 
@@ -407,6 +391,7 @@ export const uploadAvatar = async (payload: { userId: string; file: File }): Pro
   formData.append('avatar', payload.file);
   const response = await fetch(`${API_BASE_URL}/api/users/${payload.userId}/avatar`, {
     method: 'POST',
+    headers: authHeaders(),
     body: formData,
   });
 
@@ -496,6 +481,7 @@ export const uploadMessageImage = async (file: File): Promise<{ url: string }> =
 
   const response = await fetch(`${API_BASE_URL}/api/messages/upload`, {
     method: 'POST',
+    headers: authHeaders(),
     body: formData,
   });
 

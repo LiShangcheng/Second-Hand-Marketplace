@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Item, ViewState } from '../types';
 import ItemCard from './ItemCard';
 import { Settings, LogOut, Package, Heart, MessageCircle, Edit3, CheckCircle, RotateCcw, Pencil } from 'lucide-react';
+import { IMAGE_ACCEPT, validateImageFile } from '../imageValidation';
 
 interface ProfileProps {
   user?: User; // Optional while user session is loading
@@ -75,6 +76,12 @@ const Profile: React.FC<ProfileProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setProfileError(null);
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setProfileError(validationError);
+      e.target.value = '';
+      return;
+    }
     try {
       await onUploadAvatar(file);
     } catch (err: any) {
@@ -157,7 +164,7 @@ const Profile: React.FC<ProfileProps> = ({
                     <input
                         ref={avatarInputRef}
                         type="file"
-                        accept="image/*"
+                        accept={IMAGE_ACCEPT}
                         className="hidden"
                         onChange={handleAvatarChange}
                     />

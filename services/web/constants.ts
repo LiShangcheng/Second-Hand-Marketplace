@@ -11,7 +11,27 @@ export const CATEGORIES: Category[] = [
   'Other',
 ];
 
-export const CAMPUS_LOCATIONS = ['All Locations', 'Washington Square Campus', 'Brooklyn Campus'] as const;
+export const CAMPUS_LOCATIONS = ['All Locations', 'Washington Square Park', 'Brooklyn'] as const;
+
+export type CampusLocation = Exclude<(typeof CAMPUS_LOCATIONS)[number], 'All Locations'>;
+
+export const BROOKLYN_LOCATION_KEYWORDS = [
+  'tandon',
+  'metrotech',
+  'dibner',
+  'rogers',
+  'brooklyn',
+  'othmer',
+  'jersey',
+  'clark street',
+] as const;
+
+export const campusForLocation = (value: string): CampusLocation => {
+  const normalizedValue = value.toLowerCase();
+  return BROOKLYN_LOCATION_KEYWORDS.some((keyword) => normalizedValue.includes(keyword))
+    ? 'Brooklyn'
+    : 'Washington Square Park';
+};
 
 export const MEETUP_LOCATIONS = [
   'Bobst Library',
@@ -132,7 +152,7 @@ export const MOCK_ITEMS: Item[] = [
     category: 'Housing',
     description: '1BR sublet available for summer, furnished.',
     imageUrl: 'https://picsum.photos/id/81/400/300',
-    location: 'Washington Square Campus',
+    location: 'Washington Square Park',
     postedAt: '4 days ago',
     seller: {
       id: 'u6',
