@@ -178,9 +178,9 @@ def create_app(testing: bool = False):
             return "2"
         return None
 
-    def _normalize_nyu_email(raw_email):
+    def _normalize_email(raw_email):
         email = (raw_email or "").lower().strip()
-        if not re.fullmatch(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@nyu\.edu", email):
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             return None
         return email
 
@@ -461,14 +461,14 @@ def create_app(testing: bool = False):
     @app.route("/api/auth/register", methods=["POST"])
     def register():
         payload = request.get_json(force=True, silent=True) or {}
-        email = _normalize_nyu_email(payload.get("email"))
+        email = _normalize_email(payload.get("email"))
         password = payload.get("password") or ""
         nickname = payload.get("nickname") or "User"
         community_id = payload.get("community_id")
         if not payload.get("email") or not password:
             return jsonify({"error": "email and password required"}), 400
         if not email:
-            return jsonify({"error": "a valid @nyu.edu email is required"}), 400
+            return jsonify({"error": "a valid email address is required"}), 400
 
         created = db.create_user(
             email=email,
@@ -508,9 +508,9 @@ def create_app(testing: bool = False):
             if "community_id" in payload:
                 updates["community_id"] = payload.get("community_id")
             if "email" in payload:
-                email = _normalize_nyu_email(payload.get("email"))
+                email = _normalize_email(payload.get("email"))
                 if not email:
-                    return jsonify({"error": "a valid @nyu.edu email is required"}), 400
+                    return jsonify({"error": "a valid email address is required"}), 400
                 existing = db.get_user_by_email(email)
                 if existing and str(existing.get("id")) != str(user_id):
                     return jsonify({"error": "email already registered"}), 400

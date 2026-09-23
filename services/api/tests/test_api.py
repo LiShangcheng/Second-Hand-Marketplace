@@ -407,9 +407,10 @@ def test_register_validation(client):
     assert resp.status_code == 400
     resp = client.post(
         "/api/auth/register",
-        json={"email": "test@gmail.com", "password": "password123"},
+        json={"email": "buyer@example.com", "password": "password123"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 201
+    assert resp.get_json()["user"]["email"] == "buyer@example.com"
     resp = client.post(
         "/api/auth/register",
         json={"email": "foo@bar@nyu.edu", "password": "password123"},
@@ -535,8 +536,12 @@ def test_update_user_validation(client):
     resp = client.put(f"/api/users/{user_id}", json={})
     assert resp.status_code == 400
 
-    resp = client.put(f"/api/users/{user_id}", json={"email": "bad@example.com"})
+    resp = client.put(f"/api/users/{user_id}", json={"email": "not-an-email"})
     assert resp.status_code == 400
+
+    resp = client.put(f"/api/users/{user_id}", json={"email": "updated@example.com"})
+    assert resp.status_code == 200
+    assert resp.get_json()["email"] == "updated@example.com"
 
 
 def test_get_user_not_found(client):

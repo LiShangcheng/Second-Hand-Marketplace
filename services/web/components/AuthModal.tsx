@@ -34,7 +34,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
         setSubmitting(false);
         return;
       }
-      const fallbackName = email.includes('@') ? email.split('@')[0] : 'NYU Student';
+      const fallbackName = email.includes('@') ? email.split('@')[0] : 'User';
       const displayName = name.trim() || fallbackName;
       await onLogin({
         email: email.trim(),
@@ -111,7 +111,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ auth, onClose, onLogin, onChangeM
                         </div>
                         <input 
                             type="email" 
-                            placeholder="netid@nyu.edu" 
+                            placeholder="you@example.com"
                             className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#57068c] focus:border-transparent outline-none transition-all font-medium text-gray-800 placeholder-gray-400" 
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}

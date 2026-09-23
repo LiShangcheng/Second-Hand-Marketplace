@@ -15,7 +15,7 @@ NYU Campus Marketplace is a student-focused secondhand marketplace for buying, s
 - Mark listings as sold and manage personal listings from a profile.
 - Save and remove favorite listings.
 - Create buyer/seller conversations, send messages and images, and track unread messages.
-- Register with an `@nyu.edu` address and start using the marketplace immediately.
+- Register with any valid email address and start using the marketplace immediately.
 - Update profile information and upload an avatar.
 
 ## Architecture
